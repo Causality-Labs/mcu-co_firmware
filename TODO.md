@@ -14,5 +14,12 @@ setup and will run into a lot of issues but it will be worth it for the experien
 6. Clone STM32G4 device headers
 6. Write CMake toolchain file and root CMakeLists.txt
 7. Configure linker script and startup file for STM32G474RE (Copy what already exist ?)
-8. Verify build with a minimal main.c (LED blink)
-9. Flash and confirm on hardware via OpenOCD
+8. Compile a main.c
+
+
+## Write a GPIO driver
+
+## Write a UART driver
+
+## Write a script for flashing the firmware
+

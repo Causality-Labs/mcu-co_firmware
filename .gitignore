@@ -4,3 +4,4 @@ build/
 # Dependencies (fetched by CMake)
 deps/
 
+.vscode

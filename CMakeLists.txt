@@ -46,12 +46,15 @@ set(SOURCES
   src/main.c
   src/system_stm32g4xx.c
   startup/startup_stm32g474xx.s
+  drivers/uart.c
+  drivers/gpio.c
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})
 
 target_include_directories(${PROJECT_NAME} PRIVATE
   include
+  drivers
   ${CMSIS_CORE}
   ${CMSIS_DEVICE}
 )
