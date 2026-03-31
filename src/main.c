@@ -27,7 +27,7 @@ int main (void)
         if (gpio_toggle(GPIOA, 5))
             return -1;
 
-        delay(16000000);
+        delay(8000000);
     }
 
     return 0;
