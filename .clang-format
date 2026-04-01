@@ -1,0 +1,22 @@
+BasedOnStyle: LLVM
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 100
+
+# C pointer convention: uint8_t *ptr not uint8_t* ptr
+PointerAlignment: Right
+
+# Keep braces on same line (K&R style — dominant in embedded C)
+BreakBeforeBraces: Linux
+
+# Align consecutive macros/assignments (register tables, init blocks)
+AlignConsecutiveMacros:      Consecutive
+AlignConsecutiveAssignments: Consecutive
+
+# Don't pack short functions/ifs onto one line
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+
+# Keep include order as written (vendor headers have specific ordering requirements)
+SortIncludes: false

@@ -108,3 +108,21 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
   COMMAND ${CMAKE_OBJCOPY} -O binary $<TARGET_FILE:${PROJECT_NAME}> ${PROJECT_NAME}.bin
   COMMAND ${CMAKE_SIZE}              $<TARGET_FILE:${PROJECT_NAME}>
 )
+
+find_program(CLANG_FORMAT clang-format)
+if(CLANG_FORMAT)
+    file(GLOB_RECURSE FORMAT_SOURCES
+        "${CMAKE_SOURCE_DIR}/src/*.c"
+        "${CMAKE_SOURCE_DIR}/drivers/*.c"
+        "${CMAKE_SOURCE_DIR}/drivers/*.h"
+        "${CMAKE_SOURCE_DIR}/include/*.h"
+    )
+    add_custom_target(format
+        COMMAND ${CLANG_FORMAT} -i ${FORMAT_SOURCES}
+        COMMENT "Formatting sources with clang-format"
+    )
+    add_custom_target(format-check
+        COMMAND ${CLANG_FORMAT} --dry-run --Werror ${FORMAT_SOURCES}
+        COMMENT "Checking source formatting with clang-format"
+    )
+endif()

@@ -11,6 +11,7 @@ usage() {
     echo "  -b           Configure and build the firmware"
     echo "  -c           Clean build artifacts"
     echo "  -f <tool>    Flash firmware (tool: st, ocd)"
+    echo "  -F           Format source files with clang-format"
     echo "  -s <tool>    Run static analysis (tool: clang, cpp, both)"
     echo "  -h           Print this help message"
     exit 0
@@ -47,6 +48,11 @@ cmd_static_analysis() {
     esac
 }
 
+cmd_format() {
+    cmake -S "${SCRIPT_DIR}" -B "${BUILD_DIR}" -DENABLE_CERT_CHECK=OFF -DENABLE_CPPCHECK=OFF
+    cmake --build "${BUILD_DIR}" --target format
+}
+
 cmd_flash() {
     case "$1" in
         st)
@@ -66,11 +72,12 @@ if [ $# -eq 0 ]; then
     usage
 fi
 
-while getopts "bcf:s:h" opt; do
+while getopts "bcf:Fs:h" opt; do
     case "${opt}" in
         b) cmd_build ;;
         c) cmd_clean ;;
         f) cmd_flash "${OPTARG}" ;;
+        F) cmd_format ;;
         s) cmd_static_analysis "${OPTARG}" ;;
         h) usage ;;
         *) usage ;;

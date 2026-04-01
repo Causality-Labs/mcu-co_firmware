@@ -5,7 +5,7 @@ void delay(uint64_t ticks);
 
 int main(void)
 {
-    const gpio_pin_t    led    = { .port = GPIOA, .pin = (uint8_t)5U };
+    const gpio_pin_t led       = {.port = GPIOA, .pin = (uint8_t)5U};
     const gpio_config_t config = {
         .mode  = GPIO_MODE_OUTPUT,
         .type  = GPIO_TYPE_PUSH_PULL,
@@ -28,5 +28,6 @@ int main(void)
 
 void delay(uint64_t ticks)
 {
-    for (volatile uint64_t i = 0U; i < ticks; i++) {}
+    for (volatile uint64_t i = 0U; i < ticks; i++) {
+    }
 }

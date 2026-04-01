@@ -1,13 +1,13 @@
-#include <stdbool.h>
 #include "stm32g474xx.h"
+#include <stdbool.h>
 
-#define GPIOA_RESERVED_PINS  ((1U << 13U) | (1U << 14U) | (1U << 15U))
-#define GPIOB_RESERVED_PINS  ((1U << 3U)  | (1U << 4U))
-#define MAX_PIN_COUNT        15U
+#define GPIOA_RESERVED_PINS ((1U << 13U) | (1U << 14U) | (1U << 15U))
+#define GPIOB_RESERVED_PINS ((1U << 3U) | (1U << 4U))
+#define MAX_PIN_COUNT       15U
 
 typedef struct {
     GPIO_TypeDef *port;
-    uint8_t       pin;
+    uint8_t pin;
 } gpio_pin_t;
 
 typedef enum {
@@ -39,10 +39,10 @@ typedef enum {
  * @brief GPIO pin configuration parameters.
  */
 typedef struct {
-    gpio_mode_t  mode;
-    gpio_type_t  type;
+    gpio_mode_t mode;
+    gpio_type_t type;
     gpio_speed_t speed;
-    gpio_pull_t  pull;
+    gpio_pull_t pull;
 } gpio_config_t;
 
 /**
