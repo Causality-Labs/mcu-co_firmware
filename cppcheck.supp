@@ -1,0 +1,8 @@
+// Cross-compilation: system headers are not in the ARM sysroot
+missingIncludeSystem
+
+// Consequence of missingIncludeSystem - suppression never fires
+unmatchedSuppression
+
+// Driver API functions are not all called from main yet
+unusedFunction

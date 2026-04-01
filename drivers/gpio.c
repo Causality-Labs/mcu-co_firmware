@@ -10,128 +10,132 @@ static const uint32_t gpio_clk_bits[] = {
     RCC_AHB2ENR_GPIOGEN,
 };
 
-static bool check_reserved_pins(GPIO_TypeDef *port, uint8_t pin)
+static bool check_reserved_pins(const gpio_pin_t *gpio)
 {
-    /* make sure user can not access reserved pins. */
-    if ((port == GPIOA) && (GPIOA_RESERVED_PINS & (1U << pin)))
+    if ((gpio->port == GPIOA) && ((GPIOA_RESERVED_PINS & (1U << gpio->pin)) != 0U)) {
         return false;
-
-    if ((port == GPIOB) && (GPIOB_RESERVED_PINS & (1U << pin)))
+    }
+    if ((gpio->port == GPIOB) && ((GPIOB_RESERVED_PINS & (1U << gpio->pin)) != 0U)) {
         return false;
-
+    }
     return true;
 }
 
-static bool is_valid_pin(GPIO_TypeDef *port, uint8_t pin)
+static bool is_valid_port(const GPIO_TypeDef *port)
 {
-    if (!check_reserved_pins(port, pin))
-        return false;
+    return (port == GPIOA) || (port == GPIOB) || (port == GPIOC) ||
+           (port == GPIOD) || (port == GPIOE) || (port == GPIOF) ||
+           (port == GPIOG);
+}
 
-    if (pin > MAX_PIN_COUNT)
+static bool is_valid_pin(const gpio_pin_t *gpio)
+{
+    if (!is_valid_port(gpio->port)) {
         return false;
-
+    }
+    if (!check_reserved_pins(gpio)) {
+        return false;
+    }
+    if (gpio->pin > MAX_PIN_COUNT) {
+        return false;
+    }
     return true;
 }
 
-static bool is_pin_an_output(GPIO_TypeDef *port, uint8_t pin)
+static bool is_pin_an_output(const gpio_pin_t *gpio)
 {
-    return ((port->MODER >> (pin * 2)) & 0x3U) == 0x1U;
+    return ((gpio->port->MODER >> (gpio->pin * 2U)) & 0x3U) == 0x1U;
 }
 
-static bool is_pin_an_input(GPIO_TypeDef *port, uint8_t pin)
+static bool is_pin_an_input(const gpio_pin_t *gpio)
 {
-    return ((port->MODER >> (pin * 2)) & 0x3U) == 0x0U;  
+    return ((gpio->port->MODER >> (gpio->pin * 2U)) & 0x3U) == 0x0U;
 }
 
-int gpio_init(GPIO_TypeDef *port, uint8_t pin, gpio_config_t *config)
+int gpio_init(const gpio_pin_t *gpio, const gpio_config_t *config)
 {
-    if (!is_valid_pin(port, pin))
+    if (!is_valid_pin(gpio)) {
         return -1;
+    }
 
-    /* enable port clock */
-    uint32_t idx = ((uint32_t)port - (uint32_t)GPIOA) / sizeof(GPIO_TypeDef);
+    uint32_t idx = ((uint32_t)gpio->port - (uint32_t)GPIOA) / sizeof(GPIO_TypeDef);
+    if (idx >= (sizeof(gpio_clk_bits) / sizeof(gpio_clk_bits[0]))) {
+        return -1;
+    }
     RCC->AHB2ENR |= gpio_clk_bits[idx];
 
     /* pin mode: input / output / alternate function / analog (2 bits per pin) */
-    port->MODER &= ~(0x3U << (pin * 2));
-    port->MODER |=  ((uint32_t)config->mode  << (pin * 2));
+    gpio->port->MODER &= ~(0x3U << (gpio->pin * 2U));
+    gpio->port->MODER |=  ((uint32_t)config->mode  << (gpio->pin * 2U));
 
     /* output type: push-pull or open-drain (1 bit per pin) */
-    port->OTYPER &= ~(0x1U << pin);
-    port->OTYPER |=  ((uint32_t)config->type << pin);
+    gpio->port->OTYPER &= ~(0x1U << gpio->pin);
+    gpio->port->OTYPER |=  ((uint32_t)config->type << gpio->pin);
 
-    /* Speed */
-    port->OSPEEDR &= ~(0x3U << (pin * 2));
-    port->OSPEEDR |=  ((uint32_t)config->speed << (pin * 2));
+    /* speed (2 bits per pin) */
+    gpio->port->OSPEEDR &= ~(0x3U << (gpio->pin * 2U));
+    gpio->port->OSPEEDR |=  ((uint32_t)config->speed << (gpio->pin * 2U));
 
     /* pull-up / pull-down / none (2 bits per pin) */
-    port->PUPDR &= ~(0x3U << (pin * 2));
-    port->PUPDR |=  ((uint32_t)config->pull  << (pin * 2));
+    gpio->port->PUPDR &= ~(0x3U << (gpio->pin * 2U));
+    gpio->port->PUPDR |=  ((uint32_t)config->pull  << (gpio->pin * 2U));
 
     return 0;
 }
 
-int gpio_set(GPIO_TypeDef *port, uint8_t pin)
+int gpio_set(const gpio_pin_t *gpio)
 {
-    /* make sure user can not access reserved pins. */
-    if (!is_valid_pin(port, pin))
+    if (!is_valid_pin(gpio)) {
         return -1;
-
-    /* Is pin configured as an output.*/
-    if(!is_pin_an_output(port, pin))
+    }
+    if (!is_pin_an_output(gpio)) {
         return -1;
-
-    /* Check if pin is configures as a gpio output */
-    port->BSRR = (1U << pin); 
-
+    }
+    gpio->port->BSRR = (1U << gpio->pin);
     return 0;
 }
 
-int gpio_reset(GPIO_TypeDef *port, uint8_t pin)
+int gpio_reset(const gpio_pin_t *gpio)
 {
-    if (!is_valid_pin(port, pin))
+    if (!is_valid_pin(gpio)) {
         return -1;
-
-    /* Is pin configured as an output.*/
-    if(!is_pin_an_output(port, pin))
+    }
+    if (!is_pin_an_output(gpio)) {
         return -1;
-
-    port->BRR = (1U << pin);
-
+    }
+    gpio->port->BRR = (1U << gpio->pin);
     return 0;
 }
 
-int gpio_set_state(GPIO_TypeDef *port, uint8_t pin, bool state)
+int gpio_set_state(const gpio_pin_t *gpio, bool state)
 {
-    return state ? gpio_set(port, pin) : gpio_reset(port, pin);
+    return state ? gpio_set(gpio) : gpio_reset(gpio);
 }
 
-int gpio_toggle(GPIO_TypeDef *port, uint8_t pin)
+int gpio_toggle(const gpio_pin_t *gpio)
 {
-    if (!is_valid_pin(port, pin))
+    if (!is_valid_pin(gpio)) {
         return -1;
-
-    /* Is pin configured as an output.*/
-    if(!is_pin_an_output(port, pin))
+    }
+    if (!is_pin_an_output(gpio)) {
         return -1;
-
-    port->ODR ^= (0x1U << pin);
-
+    }
+    gpio->port->ODR ^= (0x1U << gpio->pin);
     return 0;
 }
-int gpio_read(GPIO_TypeDef *port, uint8_t pin, bool *state)
+
+int gpio_read(const gpio_pin_t *gpio, bool *state)
 {
-    if (!is_valid_pin(port, pin))
+    if (!is_valid_pin(gpio)) {
         return -1;
-
-    /* Is pin configured as an output.*/
-    if(!is_pin_an_input(port, pin))
+    }
+    if (!is_pin_an_input(gpio)) {
         return -1;
-
-    if (port->IDR & (0x1U << pin))
+    }
+    if ((gpio->port->IDR & (0x1U << gpio->pin)) != 0U) {
         *state = true;
-    else
+    } else {
         *state = false;
-
+    }
     return 0;
 }

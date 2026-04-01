@@ -1,0 +1,3 @@
+Checks: "cert-*"
+WarningsAsErrors: "cert-*"
+HeaderFilterRegex: "drivers/.*"

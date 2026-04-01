@@ -1,34 +1,32 @@
-#include <stdio.h>
 #include "gpio.h"
 #include "uart.h"
 
-void delay(uint64_t ticks)
-{
-    for (volatile uint64_t i = 0; i < ticks; i++) {}
+void delay(uint64_t ticks);
 
-    return;
-}
-
-int main (void)
+int main(void)
 {
-    gpio_config_t config = {
-        .mode  = 1,  /* output */
-        .type  = 0,  /* push-pull */
-        .speed = 0,  /* low speed */
-        .pull  = 0,  /* no pull */
+    const gpio_pin_t    led    = { .port = GPIOA, .pin = (uint8_t)5U };
+    const gpio_config_t config = {
+        .mode  = GPIO_MODE_OUTPUT,
+        .type  = GPIO_TYPE_PUSH_PULL,
+        .speed = GPIO_SPEED_LOW,
+        .pull  = GPIO_PULL_NONE,
     };
+    int ret = 0;
 
-    int ret = gpio_init(GPIOA, 5, &config);
-    if (ret != 0)
-        return -1;
+    ret = gpio_init(&led, &config);
 
-    while (1)
-    {
-        if (gpio_toggle(GPIOA, 5))
-            return -1;
-
-        delay(80000);
+    while (ret == 0) {
+        ret = gpio_toggle(&led);
+        if (ret == 0) {
+            delay(80000U);
+        }
     }
 
-    return 0;
+    return ret;
+}
+
+void delay(uint64_t ticks)
+{
+    for (volatile uint64_t i = 0U; i < ticks; i++) {}
 }

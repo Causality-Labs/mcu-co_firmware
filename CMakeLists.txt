@@ -7,7 +7,7 @@ project(mcu-co-firmware VERSION 1.0
         DESCRIPTION "Firmware for mcu-co"
         LANGUAGES C ASM)
 
-set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -28,8 +28,14 @@ FetchContent_Declare(cmsis_device_g4
 FetchContent_MakeAvailable(CMSIS_5 cmsis_device_g4)
 
 add_compile_options(
+  -std=c99
   -Wall
   -Wextra
+  -Wconversion
+  -Wsign-conversion
+  -Wshadow
+  -Wstrict-prototypes
+  -Wmissing-prototypes
   -Werror
   -Os
   -g
@@ -42,15 +48,45 @@ add_compile_definitions(STM32G474xx)
 set(CMSIS_CORE    ${cmsis_5_SOURCE_DIR}/CMSIS/Core/Include)
 set(CMSIS_DEVICE  ${cmsis_device_g4_SOURCE_DIR}/Include)
 
-set(SOURCES
+# Vendor code compiled separately so analysis tools are never applied to it
+add_library(vendor OBJECT
+  vendor/system_stm32g4xx.c
+  vendor/startup_stm32g474xx.s
+)
+target_include_directories(vendor PRIVATE ${CMSIS_CORE} ${CMSIS_DEVICE})
+
+# Enable analysis tools before add_executable so they apply only to our sources
+option(ENABLE_CERT_CHECK "Run CERT-C compliance checks with clang-tidy" OFF)
+option(ENABLE_CPPCHECK   "Run general static analysis with cppcheck"    OFF)
+
+if(ENABLE_CERT_CHECK)
+    find_program(CLANG_TIDY clang-tidy REQUIRED)
+    set(CMAKE_C_CLANG_TIDY
+        ${CLANG_TIDY}
+        --extra-arg=-Wno-unused-command-line-argument
+    )
+endif()
+
+if(ENABLE_CPPCHECK)
+    find_program(CPPCHECK cppcheck REQUIRED)
+    set(CMAKE_C_CPPCHECK
+        ${CPPCHECK}
+        --std=c99
+        --enable=all
+        --error-exitcode=1
+        "--suppressions-list=${CMAKE_SOURCE_DIR}/cppcheck.supp"
+        "--suppress=*:${CMAKE_BINARY_DIR}/_deps/*"
+        -D__GNUC__
+    )
+endif()
+
+
+add_executable(${PROJECT_NAME}
   src/main.c
-  src/system_stm32g4xx.c
-  startup/startup_stm32g474xx.s
   drivers/uart.c
   drivers/gpio.c
+  $<TARGET_OBJECTS:vendor>
 )
-
-add_executable(${PROJECT_NAME} ${SOURCES})
 
 target_include_directories(${PROJECT_NAME} PRIVATE
   include
@@ -60,7 +96,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 )
 
 target_link_options(${PROJECT_NAME} PRIVATE
-  -T${CMAKE_SOURCE_DIR}/linker/STM32G474RETX_FLASH.ld
+  -T${CMAKE_SOURCE_DIR}/vendor/STM32G474RETX_FLASH.ld
   -Wl,--gc-sections
   -Wl,--print-memory-usage
   --specs=nano.specs
