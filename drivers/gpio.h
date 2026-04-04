@@ -1,9 +1,14 @@
-#include "stm32g474xx.h"
+#ifndef GPIO_H
+#define GPIO_H
+
 #include <stdbool.h>
+#include "stm32g474xx.h"
 
 #define GPIOA_RESERVED_PINS ((1U << 13U) | (1U << 14U) | (1U << 15U))
 #define GPIOB_RESERVED_PINS ((1U << 3U) | (1U << 4U))
 #define MAX_PIN_COUNT       15U
+#define GPIO_NUM_OF_PORTS   7U
+#define MAX_GPIO_INTERRUPTS 16
 
 typedef struct {
     GPIO_TypeDef *port;
@@ -35,6 +40,19 @@ typedef enum {
     GPIO_PULL_DOWN = 2U,
 } gpio_pull_t;
 
+typedef enum {
+    GPIO_LOW  = 0U,
+    GPIO_HIGH = 1U,
+} gpio_state_t;
+
+typedef enum {
+    RISING  = 0U,
+    FALLING = 1U,
+    BOTH    = 2U,
+} gpio_trigger_t;
+
+typedef void (*gpio_irq_callback_t)(void);
+
 /**
  * @brief GPIO pin configuration parameters.
  */
@@ -44,6 +62,12 @@ typedef struct {
     gpio_speed_t speed;
     gpio_pull_t pull;
 } gpio_config_t;
+
+typedef struct {
+    gpio_trigger_t trigger;
+    gpio_irq_callback_t callback;
+    uint8_t priority;
+} gpio_irq_config_t;
 
 /**
  * @brief Initialise a GPIO pin.
@@ -87,7 +111,7 @@ int gpio_reset(const gpio_pin_t *gpio);
  * @param state Desired logic level (true = high, false = low)
  * @return 0 on success, -1 if the pin is invalid or not configured as output
  */
-int gpio_set_state(const gpio_pin_t *gpio, bool state);
+int gpio_set_state(const gpio_pin_t *gpio, gpio_state_t state);
 
 /**
  * @brief Toggle a GPIO output pin.
@@ -109,3 +133,28 @@ int gpio_toggle(const gpio_pin_t *gpio);
  * @return 0 on success, -1 if the pin is invalid or not configured as input
  */
 int gpio_read(const gpio_pin_t *gpio, bool *state);
+
+/**
+ * @brief Configure a GPIO pin as an external interrupt.
+ *
+ * Enables the SYSCFG clock, maps the port to the EXTI line, configures the
+ * trigger edge, unmasks the line, and enables the NVIC interrupt.
+ *
+ * @param gpio   Pointer to pin handle (port + pin number)
+ * @param config Pointer to interrupt configuration (trigger and callback)
+ * @return 0 on success, -1 on invalid pin
+ */
+int gpio_init_interrupt(const gpio_pin_t *gpio, const gpio_irq_config_t *config);
+
+/**
+ * @brief Deconfigure a GPIO external interrupt.
+ *
+ * Disables the NVIC interrupt, masks the EXTI line, clears the trigger
+ * configuration, clears the EXTICR port mapping, and removes the callback.
+ *
+ * @param gpio Pointer to pin handle (port + pin number)
+ * @return 0 on success, -1 on invalid pin
+ */
+int gpio_deinit_interrupt(const gpio_pin_t *gpio);
+
+#endif /* GPIO_H */
