@@ -18,6 +18,12 @@ static gpio_irq_callback_t irq_callbacks[MAX_GPIO_INTERRUPTS] = {0};
 
 extern const gpio_pin_t led;
 
+static int32_t port_to_idx(const GPIO_TypeDef *port)
+{
+    int32_t idx = (int32_t)(((uintptr_t)port - (uintptr_t)GPIOA) / 0x400U);
+    return ((uint32_t)idx < GPIO_NUM_OF_PORTS) ? idx : -1;
+}
+
 static bool check_reserved_pins(const gpio_pin_t *gpio)
 {
     if ((gpio->port == GPIOA) && ((GPIOA_RESERVED_PINS & (1U << gpio->pin)) != 0U)) {
@@ -81,26 +87,12 @@ int gpio_init(const gpio_pin_t *gpio, const gpio_config_t *config)
         return -1;
     }
 
-    uint32_t idx;
-    if (gpio->port == GPIOA) {
-        idx = 0U;
-    } else if (gpio->port == GPIOB) {
-        idx = 1U;
-    } else if (gpio->port == GPIOC) {
-        idx = 2U;
-    } else if (gpio->port == GPIOD) {
-        idx = 3U;
-    } else if (gpio->port == GPIOE) {
-        idx = 4U;
-    } else if (gpio->port == GPIOF) {
-        idx = 5U;
-    } else if (gpio->port == GPIOG) {
-        idx = 6U;
-    } else {
+    int32_t port_idx = port_to_idx(gpio->port);
+    if (port_idx < 0) {
         return -1;
     }
 
-    RCC->AHB2ENR |= gpio_clk_bits[idx];
+    RCC->AHB2ENR |= gpio_clk_bits[(uint32_t)port_idx];
 
     gpio->port->MODER &= ~(0x3U << (gpio->pin * 2U));
     gpio->port->MODER |= ((uint32_t)config->mode << (gpio->pin * 2U));
@@ -196,34 +188,18 @@ int gpio_init_interrupt(const gpio_pin_t *gpio, const gpio_irq_config_t *config)
         return -1;
     }
 
-    /*Clock Enable here.*/
-    RCC->APB2ENR |= RCC_APB2ENR_SYSCFGEN;
-
-    /* EXTICR config here */
     uint8_t exticr_idx   = gpio->pin / 4U;
     uint8_t exticr_shift = (gpio->pin % 4U) * 4U;
-    uint32_t port_idx;
-
-    if (gpio->port == GPIOA) {
-        port_idx = 0U;
-    } else if (gpio->port == GPIOB) {
-        port_idx = 1U;
-    } else if (gpio->port == GPIOC) {
-        port_idx = 2U;
-    } else if (gpio->port == GPIOD) {
-        port_idx = 3U;
-    } else if (gpio->port == GPIOE) {
-        port_idx = 4U;
-    } else if (gpio->port == GPIOF) {
-        port_idx = 5U;
-    } else if (gpio->port == GPIOG) {
-        port_idx = 6U;
-    } else {
+    int32_t port_idx     = port_to_idx(gpio->port);
+    if (port_idx < 0) {
         return -1;
     }
 
-    SYSCFG->EXTICR[exticr_idx] &= ~(0xFU << exticr_shift);    // clear the 4-bit field
-    SYSCFG->EXTICR[exticr_idx] |= (port_idx << exticr_shift); // write port selection
+    /*Clock Enable here.*/
+    RCC->APB2ENR |= RCC_APB2ENR_SYSCFGEN;
+
+    SYSCFG->EXTICR[exticr_idx] &= ~(0xFU << exticr_shift);              // clear the 4-bit field
+    SYSCFG->EXTICR[exticr_idx] |= ((uint32_t)port_idx << exticr_shift); // write port selection
 
     /* Set IMR1 */
     EXTI->IMR1 |= (0x1U << gpio->pin);
