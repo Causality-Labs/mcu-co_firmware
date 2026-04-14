@@ -14,37 +14,41 @@ static const uint32_t gpio_clk_bits[GPIO_NUM_OF_PORTS] = {
     RCC_AHB2ENR_GPIOEEN, RCC_AHB2ENR_GPIOFEN, RCC_AHB2ENR_GPIOGEN,
 };
 
+static GPIO_TypeDef *const gpio_ports[GPIO_NUM_OF_PORTS] = {
+    GPIOA, GPIOB, GPIOC, GPIOD, GPIOE, GPIOF, GPIOG,
+};
+
 static gpio_irq_callback_t irq_callbacks[MAX_GPIO_INTERRUPTS] = {0};
 
-extern const gpio_pin_t led;
-
-static int32_t port_to_idx(const GPIO_TypeDef *port)
+static GPIO_TypeDef *get_port(const gpio_pin_t *gpio)
 {
-    int32_t idx = (int32_t)(((uintptr_t)port - (uintptr_t)GPIOA) / 0x400U);
-    return ((uint32_t)idx < GPIO_NUM_OF_PORTS) ? idx : -1;
+    return gpio_ports[gpio->port];
+}
+
+static bool is_valid_port(gpio_port_t port)
+{
+    return (uint32_t)port < GPIO_NUM_OF_PORTS;
 }
 
 static bool check_reserved_pins(const gpio_pin_t *gpio)
 {
-    if ((gpio->port == GPIOA) && ((GPIOA_RESERVED_PINS & (1U << gpio->pin)) != 0U)) {
+    if ((gpio->port == GPIO_PORT_A) && ((GPIOA_RESERVED_PINS & (1U << gpio->pin)) != 0U)) {
         return false;
     }
 
-    if ((gpio->port == GPIOB) && ((GPIOB_RESERVED_PINS & (1U << gpio->pin)) != 0U)) {
+    if ((gpio->port == GPIO_PORT_B) && ((GPIOB_RESERVED_PINS & (1U << gpio->pin)) != 0U)) {
         return false;
     }
 
     return true;
 }
 
-static bool is_valid_port(const GPIO_TypeDef *port)
-{
-    return (port == GPIOA) || (port == GPIOB) || (port == GPIOC) || (port == GPIOD) ||
-           (port == GPIOE) || (port == GPIOF) || (port == GPIOG);
-}
-
 static bool is_valid_pin(const gpio_pin_t *gpio)
 {
+    if (gpio == NULL) {
+        return false;
+    }
+
     if (!is_valid_port(gpio->port)) {
         return false;
     }
@@ -60,20 +64,25 @@ static bool is_valid_pin(const gpio_pin_t *gpio)
     return true;
 }
 
-static bool is_pin_an_output(const gpio_pin_t *gpio)
+bool is_pin_an_input(const gpio_pin_t *gpio)
 {
-    return ((gpio->port->MODER >> (gpio->pin * 2U)) & 0x3U) == 0x1U;
+    return ((get_port(gpio)->MODER >> (gpio->pin * 2U)) & 0x3U) == 0x0U;
 }
 
-static bool is_pin_an_input(const gpio_pin_t *gpio)
+bool is_pin_an_output(const gpio_pin_t *gpio)
 {
-    return ((gpio->port->MODER >> (gpio->pin * 2U)) & 0x3U) == 0x0U;
+    return ((get_port(gpio)->MODER >> (gpio->pin * 2U)) & 0x3U) == 0x1U;
+}
+
+bool is_pin_an_af(const gpio_pin_t *gpio)
+{
+    return ((get_port(gpio)->MODER >> (gpio->pin * 2U)) & 0x3U) == 0x2U;
 }
 
 static IRQn_Type get_exti_irqn(uint8_t pin)
 {
     if (pin <= 4U) {
-        return (IRQn_Type)(EXTI0_IRQn + pin); // EXTI0-4 are sequential
+        return (IRQn_Type)(EXTI0_IRQn + pin);
     } else if (pin <= 9U) {
         return EXTI9_5_IRQn;
     } else {
@@ -83,28 +92,29 @@ static IRQn_Type get_exti_irqn(uint8_t pin)
 
 int gpio_init(const gpio_pin_t *gpio, const gpio_config_t *config)
 {
+    if (config == NULL) {
+        return -1;
+    }
+
     if (!is_valid_pin(gpio)) {
         return -1;
     }
 
-    int32_t port_idx = port_to_idx(gpio->port);
-    if (port_idx < 0) {
-        return -1;
-    }
+    GPIO_TypeDef *port = get_port(gpio);
 
-    RCC->AHB2ENR |= gpio_clk_bits[(uint32_t)port_idx];
+    RCC->AHB2ENR |= gpio_clk_bits[(uint32_t)gpio->port];
 
-    gpio->port->MODER &= ~(0x3U << (gpio->pin * 2U));
-    gpio->port->MODER |= ((uint32_t)config->mode << (gpio->pin * 2U));
+    port->MODER &= ~(0x3U << (gpio->pin * 2U));
+    port->MODER |= ((uint32_t)config->mode << (gpio->pin * 2U));
 
-    gpio->port->OTYPER &= ~(0x1U << gpio->pin);
-    gpio->port->OTYPER |= ((uint32_t)config->type << gpio->pin);
+    port->OTYPER &= ~(0x1U << gpio->pin);
+    port->OTYPER |= ((uint32_t)config->type << gpio->pin);
 
-    gpio->port->OSPEEDR &= ~(0x3U << (gpio->pin * 2U));
-    gpio->port->OSPEEDR |= ((uint32_t)config->speed << (gpio->pin * 2U));
+    port->OSPEEDR &= ~(0x3U << (gpio->pin * 2U));
+    port->OSPEEDR |= ((uint32_t)config->speed << (gpio->pin * 2U));
 
-    gpio->port->PUPDR &= ~(0x3U << (gpio->pin * 2U));
-    gpio->port->PUPDR |= ((uint32_t)config->pull << (gpio->pin * 2U));
+    port->PUPDR &= ~(0x3U << (gpio->pin * 2U));
+    port->PUPDR |= ((uint32_t)config->pull << (gpio->pin * 2U));
 
     return 0;
 }
@@ -120,7 +130,7 @@ int gpio_set(const gpio_pin_t *gpio)
     }
 
     /* Atomic set */
-    gpio->port->BSRR = (1U << gpio->pin);
+    get_port(gpio)->BSRR = (1U << gpio->pin);
 
     return 0;
 }
@@ -135,8 +145,8 @@ int gpio_reset(const gpio_pin_t *gpio)
         return -1;
     }
 
-    /* Atomic set */
-    gpio->port->BRR = (1U << gpio->pin);
+    /* Atomic reset */
+    get_port(gpio)->BRR = (1U << gpio->pin);
 
     return 0;
 }
@@ -151,16 +161,22 @@ int gpio_toggle(const gpio_pin_t *gpio)
     if (!is_valid_pin(gpio)) {
         return -1;
     }
+
     if (!is_pin_an_output(gpio)) {
         return -1;
     }
-    gpio->port->ODR ^= (0x1U << gpio->pin);
+
+    get_port(gpio)->ODR ^= (0x1U << gpio->pin);
 
     return 0;
 }
 
 int gpio_read(const gpio_pin_t *gpio, bool *state)
 {
+    if (state == NULL) {
+        return -1;
+    }
+
     if (!is_valid_pin(gpio)) {
         return -1;
     }
@@ -169,7 +185,7 @@ int gpio_read(const gpio_pin_t *gpio, bool *state)
         return -1;
     }
 
-    if ((gpio->port->IDR & (0x1U << gpio->pin)) != 0U) {
+    if ((get_port(gpio)->IDR & (0x1U << gpio->pin)) != 0U) {
         *state = true;
     } else {
         *state = false;
@@ -180,6 +196,10 @@ int gpio_read(const gpio_pin_t *gpio, bool *state)
 
 int gpio_init_interrupt(const gpio_pin_t *gpio, const gpio_irq_config_t *config)
 {
+    if (config == NULL) {
+        return -1;
+    }
+
     if (!is_valid_pin(gpio)) {
         return -1;
     }
@@ -190,16 +210,13 @@ int gpio_init_interrupt(const gpio_pin_t *gpio, const gpio_irq_config_t *config)
 
     uint8_t exticr_idx   = gpio->pin / 4U;
     uint8_t exticr_shift = (gpio->pin % 4U) * 4U;
-    int32_t port_idx     = port_to_idx(gpio->port);
-    if (port_idx < 0) {
-        return -1;
-    }
+    uint32_t port_idx    = (uint32_t)gpio->port;
 
     /*Clock Enable here.*/
     RCC->APB2ENR |= RCC_APB2ENR_SYSCFGEN;
 
-    SYSCFG->EXTICR[exticr_idx] &= ~(0xFU << exticr_shift);              // clear the 4-bit field
-    SYSCFG->EXTICR[exticr_idx] |= ((uint32_t)port_idx << exticr_shift); // write port selection
+    SYSCFG->EXTICR[exticr_idx] &= ~(0xFU << exticr_shift);
+    SYSCFG->EXTICR[exticr_idx] |= (port_idx << exticr_shift);
 
     /* Set IMR1 */
     EXTI->IMR1 |= (0x1U << gpio->pin);
@@ -245,6 +262,27 @@ int gpio_deinit_interrupt(const gpio_pin_t *gpio)
     SYSCFG->EXTICR[exticr_idx] &= ~(0xFU << exticr_shift);
 
     irq_callbacks[gpio->pin] = NULL;
+
+    return 0;
+}
+
+int gpio_set_af(const gpio_pin_t *gpio, gpio_af_t af)
+{
+    if (!is_valid_pin(gpio)) {
+        return -1;
+    }
+
+    GPIO_TypeDef *port = get_port(gpio);
+
+    /* AFR[0] = AFRL (pins 0-7), AFR[1] = AFRH (pins 8-15).
+     * Each pin occupies a 4-bit field. */
+    if (gpio->pin < 8U) {
+        port->AFR[0] &= ~(0xFUL << (gpio->pin * 4U));
+        port->AFR[0] |= ((uint32_t)af << (gpio->pin * 4U));
+    } else {
+        port->AFR[1] &= ~(0xFUL << ((gpio->pin - 8U) * 4U));
+        port->AFR[1] |= ((uint32_t)af << ((gpio->pin - 8U) * 4U));
+    }
 
     return 0;
 }

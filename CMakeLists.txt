@@ -37,7 +37,7 @@ add_compile_options(
   -Wstrict-prototypes
   -Wmissing-prototypes
   -Werror
-  -O
+  -O0
   -g
   -fdata-sections
   -ffunction-sections
@@ -85,6 +85,7 @@ add_executable(${PROJECT_NAME}
   src/main.c
   drivers/uart.c
   drivers/gpio.c
+  drivers/clock.c
   $<TARGET_OBJECTS:vendor>
 )
 

@@ -10,8 +10,18 @@
 #define GPIO_NUM_OF_PORTS   7U
 #define MAX_GPIO_INTERRUPTS 16
 
+typedef enum {
+    GPIO_PORT_A = 0U,
+    GPIO_PORT_B = 1U,
+    GPIO_PORT_C = 2U,
+    GPIO_PORT_D = 3U,
+    GPIO_PORT_E = 4U,
+    GPIO_PORT_F = 5U,
+    GPIO_PORT_G = 6U,
+} gpio_port_t;
+
 typedef struct {
-    GPIO_TypeDef *port;
+    gpio_port_t port;
     uint8_t pin;
 } gpio_pin_t;
 
@@ -50,6 +60,25 @@ typedef enum {
     FALLING = 1U,
     BOTH    = 2U,
 } gpio_trigger_t;
+
+typedef enum {
+    GPIO_AF0  = 0U,
+    GPIO_AF1  = 1U,
+    GPIO_AF2  = 2U,
+    GPIO_AF3  = 3U,
+    GPIO_AF4  = 4U,
+    GPIO_AF5  = 5U,
+    GPIO_AF6  = 6U,
+    GPIO_AF7  = 7U,
+    GPIO_AF8  = 8U,
+    GPIO_AF9  = 9U,
+    GPIO_AF10 = 10U,
+    GPIO_AF11 = 11U,
+    GPIO_AF12 = 12U,
+    GPIO_AF13 = 13U,
+    GPIO_AF14 = 14U,
+    GPIO_AF15 = 15U,
+} gpio_af_t;
 
 typedef void (*gpio_irq_callback_t)(void);
 
@@ -156,5 +185,11 @@ int gpio_init_interrupt(const gpio_pin_t *gpio, const gpio_irq_config_t *config)
  * @return 0 on success, -1 on invalid pin
  */
 int gpio_deinit_interrupt(const gpio_pin_t *gpio);
+
+bool is_pin_an_af(const gpio_pin_t *gpio);
+bool is_pin_an_output(const gpio_pin_t *gpio);
+bool is_pin_an_input(const gpio_pin_t *gpio);
+
+int gpio_set_af(const gpio_pin_t *gpio, gpio_af_t af);
 
 #endif /* GPIO_H */
