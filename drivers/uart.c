@@ -30,6 +30,15 @@ static const uart_pins_t uart_pins[NUM_OF_UART_PORTS] = {
     [UART_INSTANCE_LPUART1] = {.tx = {GPIO_PORT_A, 2U}, .rx = {GPIO_PORT_A, 3U}, .af = GPIO_AF12},
 };
 
+static bool uart_initialized[NUM_OF_UART_PORTS] = {
+    [UART_INSTANCE_USART1]  = false,
+    [UART_INSTANCE_USART2]  = false,
+    [UART_INSTANCE_USART3]  = false,
+    [UART_INSTANCE_UART4]   = false,
+    [UART_INSTANCE_UART5]   = false,
+    [UART_INSTANCE_LPUART1] = false,
+};
+
 static bool is_gpio_pin_being_used(const uart_pins_t *pins)
 {
     if (is_pin_an_input(&pins->rx) || is_pin_an_output(&pins->rx) || is_pin_an_af(&pins->rx)) {
@@ -188,6 +197,8 @@ int uart_init(const uart_handle_t *handle, const uart_config_t *config)
         uart_channel->CR1 |= USART_CR1_RE;
     }
 
+    uart_initialized[handle->instance] = true;
+
     return 0;
 }
 
@@ -213,6 +224,10 @@ static int uart_write_byte(USART_TypeDef *uart_channel, const uint8_t data)
 int uart_write_buffer(const uart_handle_t *handle, const uint8_t *data, uint16_t length)
 {
     if (handle == NULL || data == NULL || handle->instance >= NUM_OF_UART_PORTS) {
+        return -1;
+    }
+
+    if (uart_initialized[handle->instance] == false) {
         return -1;
     }
 
