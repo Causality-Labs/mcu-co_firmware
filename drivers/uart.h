@@ -70,7 +70,12 @@ typedef struct {
     gpio_af_t af;
 } uart_pins_t;
 
-int uart_init(const uart_handle_t *handle, const uart_config_t *config);
+typedef struct {
+    uint8_t  *buffer;
+    uint16_t  size;
+} uart_rx_buffer_t;
+
+int uart_init(const uart_handle_t *handle, const uart_config_t *config, const uart_rx_buffer_t *rx_buffer);
 int uart_deinit(const uart_handle_t *handle);
 int uart_write_buffer(const uart_handle_t *handle, const uint8_t *data, uint16_t length);
 int uart_read_buffer(const uart_handle_t *handle, uint8_t *data, uint16_t length);

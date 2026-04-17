@@ -86,6 +86,7 @@ add_executable(${PROJECT_NAME}
   drivers/uart.c
   drivers/gpio.c
   drivers/clock.c
+  data_structures/ring_buffer.c
   $<TARGET_OBJECTS:vendor>
 )
 
@@ -94,6 +95,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES SUFFIX ".elf")
 target_include_directories(${PROJECT_NAME} PRIVATE
   include
   drivers
+  data_structures
   ${CMSIS_CORE}
   ${CMSIS_DEVICE}
 )

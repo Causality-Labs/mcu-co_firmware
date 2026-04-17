@@ -1,5 +1,6 @@
 #include <stddef.h>
 #include <stdbool.h>
+#include "ring-buffer.h"
 #include "uart.h"
 #include "gpio.h"
 
@@ -30,6 +31,15 @@ static const uart_pins_t uart_pins[NUM_OF_UART_PORTS] = {
     [UART_INSTANCE_LPUART1] = {.tx = {GPIO_PORT_A, 2U}, .rx = {GPIO_PORT_A, 3U}, .af = GPIO_AF12},
 };
 
+static const IRQn_Type uart_irqn[NUM_OF_UART_PORTS] = {
+    [UART_INSTANCE_USART1]  = USART1_IRQn,
+    [UART_INSTANCE_USART2]  = USART2_IRQn,
+    [UART_INSTANCE_USART3]  = USART3_IRQn,
+    [UART_INSTANCE_UART4]   = UART4_IRQn,
+    [UART_INSTANCE_UART5]   = UART5_IRQn,
+    [UART_INSTANCE_LPUART1] = LPUART1_IRQn,
+};
+
 static bool uart_initialized[NUM_OF_UART_PORTS] = {
     [UART_INSTANCE_USART1]  = false,
     [UART_INSTANCE_USART2]  = false,
@@ -38,6 +48,8 @@ static bool uart_initialized[NUM_OF_UART_PORTS] = {
     [UART_INSTANCE_UART5]   = false,
     [UART_INSTANCE_LPUART1] = false,
 };
+
+static ring_buffer_t *rx_buffers[NUM_OF_UART_PORTS];
 
 static bool is_gpio_pin_being_used(const uart_pins_t *pins)
 {
@@ -150,13 +162,51 @@ static int uart_gpio_config(const uart_pins_t *pins)
     return 0;
 }
 
-int uart_init(const uart_handle_t *handle, const uart_config_t *config)
+static int uart_write_byte(USART_TypeDef *uart_channel, const uint8_t data)
+{
+
+    /* Wait until TDR is empty */
+    if (wait_for_ack(uart_channel, USART_ISR_TXE) != 0) {
+        return -1;
+    }
+
+    uart_channel->TDR = (uint32_t)data;
+
+    return 0;
+}
+
+static void uart_irq_handler(uint8_t instance)
+{
+    USART_TypeDef *uart_channel = uart_channels[instance];
+
+    /* Handle overrun first — clears ORE before reading RDR */
+    if ((uart_channel->ISR & USART_ISR_ORE) != 0U) {
+        uart_channel->ICR |= USART_ICR_ORECF;
+    }
+
+    if ((uart_channel->ISR & USART_ISR_RXNE) != 0U) {
+        uint8_t byte = (uint8_t)(uart_channel->RDR & 0xFFU);
+        (void)ring_buffer_write(&rx_buffers[instance], byte);
+    }
+}
+
+static int uart_read_byte(USART_TypeDef *uart_channel, uint8_t *data)
+{
+    return ring_buffer_read(rb, data);
+}
+
+
+int uart_init(const uart_handle_t *handle, const uart_config_t *config, const uart_rx_buffer_t *rx_buffer)
 {
     if (handle == NULL || config == NULL) {
         return -1;
     }
 
     if (handle->instance >= NUM_OF_UART_PORTS) {
+        return -1;
+    }
+
+    if (uart_initialized[handle->instance]) {
         return -1;
     }
 
@@ -182,19 +232,33 @@ int uart_init(const uart_handle_t *handle, const uart_config_t *config)
     set_baud_rate(uart_channel, config, is_lp_uart);
     set_mode(uart_channel, config);
 
+    if (config->mode == UART_MODE_RX || config->mode == UART_MODE_TX_RX) {
+        if (rx_buffer == NULL) {
+            return -1;
+        }
+
+        if (ring_buffer_init(&rx_buffers[handle->instance], rx_buffer->buf, rx_buffer->size) != 0) {
+            return -1;
+        }
+
+        uart_channel->CR1 |= USART_CR1_RXNEIE;
+        NVIC_SetPriority(uart_irqn[handle->instance], 5U);
+        NVIC_EnableIRQ(uart_irqn[handle->instance]);
+    }
+
     uart_channel->CR1 |= USART_CR1_UE;
+    set_mode(uart_channel, config);
 
     if (config->mode == UART_MODE_TX || config->mode == UART_MODE_TX_RX) {
-        // if (wait_for_ack(uart_channel, USART_ISR_TEACK) != 0) {
-        //     return -1;
-        // }
-        uart_channel->CR1 |= USART_CR1_TE;
+        if (wait_for_ack(uart_channel, USART_ISR_TEACK) != 0) {
+            return -1;
+        }
     }
+
     if (config->mode == UART_MODE_RX || config->mode == UART_MODE_TX_RX) {
-        // if (wait_for_ack(uart_channel, USART_ISR_REACK) != 0) {
-        //     return -1;
-        // }
-        uart_channel->CR1 |= USART_CR1_RE;
+        if (wait_for_ack(uart_channel, USART_ISR_REACK) != 0) {
+            return -1;
+        }
     }
 
     uart_initialized[handle->instance] = true;
@@ -205,19 +269,6 @@ int uart_init(const uart_handle_t *handle, const uart_config_t *config)
 int uart_deinit(const uart_handle_t *handle)
 {
     (void)handle;
-    return 0;
-}
-
-static int uart_write_byte(USART_TypeDef *uart_channel, const uint8_t data)
-{
-
-    /* Wait until TDR is empty */
-    if (wait_for_ack(uart_channel, USART_ISR_TXE) != 0) {
-        return -1;
-    }
-
-    uart_channel->TDR = (uint32_t)data;
-
     return 0;
 }
 
@@ -240,4 +291,55 @@ int uart_write_buffer(const uart_handle_t *handle, const uint8_t *data, uint16_t
     }
 
     return 0;
+}
+
+int uart_read_buffer(const uart_handle_t *handle, uint8_t *data, uint16_t length)
+{
+    if (handle == NULL || data == NULL || handle->instance >= NUM_OF_UART_PORTS) {
+        return -1;
+    }
+
+    if (!uart_initialized[handle->instance]) {
+        return -1;
+    }
+
+    uint16_t count = 0U;
+    while (count < length) {
+        if (ring_buffer_read(&rx_buffers[handle->instance], &data[count]) != 0) {
+            break;
+        }
+        count++;
+    }
+
+    return (int)count;
+}
+
+void USART1_IRQHandler(void)
+{
+    uart_irq_handler(UART_INSTANCE_USART1);
+}
+
+void USART2_IRQHandler(void)
+{
+    uart_irq_handler(UART_INSTANCE_USART2);
+}
+
+void USART3_IRQHandler(void)
+{
+    uart_irq_handler(UART_INSTANCE_USART3);
+}
+
+void UART4_IRQHandler(void)
+{
+    uart_irq_handler(UART_INSTANCE_UART4);
+}
+
+void UART5_IRQHandler(void)
+{
+    uart_irq_handler(UART_INSTANCE_UART5);
+}
+
+void LPUART1_IRQHandler(void)
+{
+    uart_irq_handler(UART_INSTANCE_LPUART1);
 }
