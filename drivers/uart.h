@@ -2,6 +2,7 @@
 #define UART_H
 
 #include <stdint.h>
+#include <stdbool.h>
 #include "stm32g474xx.h"
 #include "gpio.h"
 
@@ -38,11 +39,6 @@ typedef enum {
     UART_MODE_TX_RX = 2U,
 } uart_mode_t;
 
-typedef struct {
-    volatile uint32_t *reg;
-    uint32_t bit;
-} uart_clk_t;
-
 typedef enum {
     UART_INSTANCE_USART1  = 0U,
     UART_INSTANCE_USART2  = 1U,
@@ -61,23 +57,17 @@ typedef struct {
 } uart_config_t;
 
 typedef struct {
-    uart_instance_t instance;
-} uart_handle_t;
-
-typedef struct {
-    gpio_pin_t tx;
-    gpio_pin_t rx;
-    gpio_af_t af;
-} uart_pins_t;
-
-typedef struct {
-    uint8_t  *buffer;
-    uint16_t  size;
+    uint8_t *buffer;
+    uint8_t size;
+    bool data_ready;
 } uart_rx_buffer_t;
 
-int uart_init(const uart_handle_t *handle, const uart_config_t *config, const uart_rx_buffer_t *rx_buffer);
-int uart_deinit(const uart_handle_t *handle);
-int uart_write_buffer(const uart_handle_t *handle, const uint8_t *data, uint16_t length);
-int uart_read_buffer(const uart_handle_t *handle, uint8_t *data, uint16_t length);
+int uart_init(uart_instance_t instance, const uart_config_t *config,
+              const uart_rx_buffer_t *rx_buffer);
+int uart_deinit(uart_instance_t instance);
+int uart_write_byte(uart_instance_t instance, const uint8_t data);
+int uart_write_buffer(uart_instance_t instance, const uint8_t *data, uint16_t length);
+int uart_read_byte(uart_instance_t instance, uint8_t *data);
+int uart_read_buffer(uart_instance_t instance, uint8_t *data, uint16_t length);
 
 #endif /* UART_H */

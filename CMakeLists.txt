@@ -86,7 +86,7 @@ add_executable(${PROJECT_NAME}
   drivers/uart.c
   drivers/gpio.c
   drivers/clock.c
-  data_structures/ring_buffer.c
+  data_structures/ring-buffer.c
   $<TARGET_OBJECTS:vendor>
 )
 

@@ -1,9 +1,12 @@
+#include <stdio.h>
 #include "gpio.h"
 #include "uart.h"
 
-const gpio_pin_t led      = {.port = GPIO_PORT_A, .pin = (uint8_t)5U};
-const gpio_pin_t button   = {.port = GPIO_PORT_C, .pin = (uint8_t)13U};
-const uart_handle_t debug = {.instance = UART_INSTANCE_USART1};
+const gpio_pin_t led        = {.port = GPIO_PORT_A, .pin = (uint8_t)5U};
+const gpio_pin_t button     = {.port = GPIO_PORT_C, .pin = (uint8_t)13U};
+const uart_instance_t debug = UART_INSTANCE_USART1;
+
+static uint8_t rx_storage[64];
 
 void delay(uint64_t ticks);
 void button_ISR(void);
@@ -34,14 +37,12 @@ int main(void)
         .mode       = UART_MODE_TX_RX,
     };
 
-    ret = uart_init(&debug, &debug_config);
-    if (ret != 0) {
-        for (;;) {
-        }
-    }
+    const uart_rx_buffer_t rx_buf = {
+        .buffer = rx_storage,
+        .size   = sizeof(rx_storage),
+    };
 
-    const uint8_t msg[] = "Hello, World!\r\n";
-    ret                 = uart_write_buffer(&debug, msg, (uint16_t)(sizeof(msg) - 1U));
+    ret = uart_init(debug, &debug_config, &rx_buf);
     if (ret != 0) {
         for (;;) {
         }
@@ -71,14 +72,17 @@ int main(void)
         }
     }
 
+    uint8_t echo_buf[64];
+
     for (;;) {
-        delay(1000000U);
-        ret = uart_write_buffer(&debug, msg, (uint16_t)(sizeof(msg) - 1U));
-        if (ret != 0) {
-            for (;;) {
-            }
+
+        int n = uart_read_buffer(debug, echo_buf, (uint16_t)sizeof(echo_buf));
+        if (n > 0) {
+            (void)uart_write_buffer(debug, echo_buf, (uint16_t)n);
+            (void)gpio_toggle(&led);
         }
-        (void)gpio_toggle(&led);
+
+        delay(10000U);
     }
 
     return 0;

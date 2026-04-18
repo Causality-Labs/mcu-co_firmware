@@ -119,6 +119,28 @@ int gpio_init(const gpio_pin_t *gpio, const gpio_config_t *config)
     return 0;
 }
 
+int gpio_deinit(const gpio_pin_t *gpio)
+{
+    if (!is_valid_pin(gpio)) {
+        return -1;
+    }
+
+    GPIO_TypeDef *port = get_port(gpio);
+
+    port->MODER &= ~(0x3U << (gpio->pin * 2U));
+    port->OTYPER &= ~(0x1U << gpio->pin);
+    port->OSPEEDR &= ~(0x3U << (gpio->pin * 2U));
+    port->PUPDR &= ~(0x3U << (gpio->pin * 2U));
+
+    if (gpio->pin < 8U) {
+        port->AFR[0] &= ~(0xFUL << (gpio->pin * 4U));
+    } else {
+        port->AFR[1] &= ~(0xFUL << ((gpio->pin - 8U) * 4U));
+    }
+
+    return 0;
+}
+
 int gpio_set(const gpio_pin_t *gpio)
 {
     if (!is_valid_pin(gpio)) {

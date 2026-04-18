@@ -111,6 +111,8 @@ typedef struct {
  */
 int gpio_init(const gpio_pin_t *gpio, const gpio_config_t *config);
 
+int gpio_deinit(const gpio_pin_t *gpio);
+
 /**
  * @brief Drive a GPIO output pin high.
  *

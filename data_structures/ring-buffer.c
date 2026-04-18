@@ -18,13 +18,19 @@ int ring_buffer_init(ring_buffer_t *ring_buffer, uint8_t *buffer, uint8_t size)
     ring_buffer->size = size;
     ring_buffer->head = 0U;
     ring_buffer->tail = 0U;
-    ring_buffer->mask = size - 1U;
+    ring_buffer->mask = (uint8_t)(size - 1U);
 
     return 0;
 }
 
 int ring_buffer_flush(ring_buffer_t *ring_buffer)
 {
+    if (ring_buffer == NULL) {
+        return -1;
+    }
+
+    ring_buffer->head = 0U;
+    ring_buffer->tail = 0U;
 
     return 0;
 }
