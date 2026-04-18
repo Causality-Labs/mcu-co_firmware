@@ -92,6 +92,9 @@ typedef struct {
     gpio_pull_t pull;
 } gpio_config_t;
 
+/**
+ * @brief GPIO external interrupt configuration parameters.
+ */
 typedef struct {
     gpio_trigger_t trigger;
     gpio_irq_callback_t callback;
@@ -111,6 +114,15 @@ typedef struct {
  */
 int gpio_init(const gpio_pin_t *gpio, const gpio_config_t *config);
 
+/**
+ * @brief Reset a GPIO pin to its default state.
+ *
+ * Clears MODER, OTYPER, OSPEEDR, PUPDR, and AFR for the pin.
+ * Does not disable the port clock as other pins may still be active.
+ *
+ * @param gpio Pointer to pin handle (port + pin number)
+ * @return 0 on success, -1 on invalid pin
+ */
 int gpio_deinit(const gpio_pin_t *gpio);
 
 /**
@@ -188,10 +200,25 @@ int gpio_init_interrupt(const gpio_pin_t *gpio, const gpio_irq_config_t *config)
  */
 int gpio_deinit_interrupt(const gpio_pin_t *gpio);
 
+/** @brief Returns true if the pin is configured as alternate function. */
 bool is_pin_an_af(const gpio_pin_t *gpio);
+
+/** @brief Returns true if the pin is configured as an output. */
 bool is_pin_an_output(const gpio_pin_t *gpio);
+
+/** @brief Returns true if the pin is configured as an input. */
 bool is_pin_an_input(const gpio_pin_t *gpio);
 
+/**
+ * @brief Set the alternate function for a GPIO pin.
+ *
+ * Writes to AFRL (pins 0–7) or AFRH (pins 8–15). The pin mode must
+ * be set to GPIO_MODE_AF separately via gpio_init().
+ *
+ * @param gpio Pointer to pin handle (port + pin number)
+ * @param af   Alternate function selection (AF0–AF15)
+ * @return 0 on success, -1 on invalid pin
+ */
 int gpio_set_af(const gpio_pin_t *gpio, gpio_af_t af);
 
 #endif /* GPIO_H */

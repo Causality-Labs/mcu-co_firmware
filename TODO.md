@@ -17,9 +17,13 @@ setup and will run into a lot of issues but it will be worth it for the experien
 8. Compile a main.c
 
 
-## Write a GPIO driver
+## Write a GPIO driver (done)
 
-## Write a UART driver
+## Write a UART driver (done)
 
-## Write a script for flashing the firmware
+## Write a clock driver (doing next)
+
+## Write a debug module that uses UART
+
+## Start writng state machine
 
