@@ -1,79 +1,91 @@
-
+#include <string.h>
 #include <stddef.h>
-#include <stdbool.h>
 #include "ring-buffer.h"
 
-
-int ring_buffer_init(ring_buffer_t *ring_buffer, uint8_t *buffer, uint8_t size)
+int ring_buffer_init(ring_buffer_t *rb, void *buffer, uint16_t capacity, size_t element_size)
 {
-    if (ring_buffer == NULL || buffer == NULL) {
+    if (rb == NULL || buffer == NULL) {
         return -1;
     }
 
-    if ((size == 0U) || ((size & (size - 1U)) != 0U)) {
-        return -1;  /* not a power of 2 */
+    if (element_size == 0U) {
+        return -1;
     }
 
-    ring_buffer->buffer = buffer;
-    ring_buffer->size = size;
-    ring_buffer->head = 0U;
-    ring_buffer->tail = 0U;
-    ring_buffer->mask = (uint8_t)(size - 1U);
+    if ((capacity == 0U) || ((capacity & (capacity - 1U)) != 0U)) {
+        return -1;
+    }
+
+    rb->buffer       = buffer;
+    rb->element_size = element_size;
+    rb->capacity     = capacity;
+    rb->head         = 0U;
+    rb->tail         = 0U;
+    rb->mask         = (uint16_t)(capacity - 1U);
 
     return 0;
 }
 
-int ring_buffer_flush(ring_buffer_t *ring_buffer)
+bool ring_buffer_is_empty(const ring_buffer_t *rb)
 {
-    if (ring_buffer == NULL) {
+    if (rb == NULL) {
         return -1;
     }
 
-    ring_buffer->head = 0U;
-    ring_buffer->tail = 0U;
+    return rb->head == rb->tail;
+}
+
+bool ring_buffer_is_full(const ring_buffer_t *rb)
+{
+    if (rb == NULL) {
+        return -1;
+    }
+
+    return ((rb->head + 1U) & rb->mask) == rb->tail;
+}
+
+int ring_buffer_write(ring_buffer_t *rb, const void *element)
+{
+    if (rb == NULL || element == NULL) {
+        return -1;
+    }
+
+    if (ring_buffer_is_full(rb)) {
+        return -1;
+    }
+
+    uint8_t *dst = (uint8_t *)rb->buffer + (rb->head * rb->element_size);
+    (void)memcpy(dst, element, rb->element_size);
+    rb->head = (uint16_t)((rb->head + 1U) & rb->mask);
 
     return 0;
 }
 
-bool is_ring_buffer_empty(const ring_buffer_t *ring_buffer)
+int ring_buffer_read(ring_buffer_t *rb, void *element)
 {
-    return ring_buffer->head == ring_buffer->tail;
-}
-
-bool is_ring_buffer_full(const ring_buffer_t *ring_buffer)
-{
-    return ((ring_buffer->head + 1U) & ring_buffer->mask) == ring_buffer->tail;
-}
-
-int ring_buffer_write(ring_buffer_t *ring_buffer, uint8_t byte)
-{
-    if (ring_buffer == NULL) {
+    if (rb == NULL || element == NULL) {
         return -1;
     }
 
-    if (is_ring_buffer_full(ring_buffer)) {
+    if (ring_buffer_is_empty(rb)) {
         return -1;
     }
 
-    ring_buffer->buffer[ring_buffer->head] = byte;
-    ring_buffer->head = (ring_buffer->head + 1U) & ring_buffer->mask;
+    const uint8_t *src = (const uint8_t *)rb->buffer + (rb->tail * rb->element_size);
+    (void)memcpy(element, src, rb->element_size);
+    rb->tail = (uint16_t)((rb->tail + 1U) & rb->mask);
 
     return 0;
 }
 
-int ring_buffer_read(ring_buffer_t *ring_buffer, uint8_t *byte)
+int ring_buffer_flush(ring_buffer_t *rb)
 {
-    if (ring_buffer == NULL || byte == NULL) {
+    if (rb == NULL) {
         return -1;
     }
 
-    if (is_ring_buffer_empty(ring_buffer)) {
-        return -1;
-    }
-
-    *byte = ring_buffer->buffer[ring_buffer->tail];
-
-    ring_buffer->tail = (ring_buffer->tail + 1U) & ring_buffer->mask;
+    rb->head = 0U;
+    rb->tail = 0U;
 
     return 0;
 }

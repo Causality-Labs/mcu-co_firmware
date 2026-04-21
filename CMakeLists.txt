@@ -83,9 +83,10 @@ endif()
 
 add_executable(${PROJECT_NAME}
   src/main.c
-  drivers/uart.c
-  drivers/gpio.c
-  drivers/clock.c
+  src/log/logger.c
+  peripherals/uart.c
+  peripherals/gpio.c
+  peripherals/clock.c
   data_structures/ring-buffer.c
   $<TARGET_OBJECTS:vendor>
 )
@@ -94,7 +95,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES SUFFIX ".elf")
 
 target_include_directories(${PROJECT_NAME} PRIVATE
   include
-  drivers
+  peripherals
   data_structures
   ${CMSIS_CORE}
   ${CMSIS_DEVICE}

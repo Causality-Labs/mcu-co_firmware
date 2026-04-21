@@ -70,9 +70,8 @@ typedef struct {
  * @p size must be a power of 2.
  */
 typedef struct {
-    uint8_t *buffer;
-    uint8_t  size;
-    bool     data_ready;
+    uint8_t  *buffer;
+    uint16_t  size;
 } uart_rx_buffer_t;
 
 /**

@@ -183,7 +183,7 @@ static void uart_irq_handler(uart_instance_t instance)
 
     if ((uart_channel->ISR & USART_ISR_RXNE) != 0U) {
         uint8_t byte = (uint8_t)(uart_channel->RDR & 0xFFU);
-        (void)ring_buffer_write(&rx_buffers[instance], byte);
+        (void)ring_buffer_write(&rx_buffers[instance], &byte);
     }
 }
 
@@ -228,7 +228,7 @@ int uart_init(uart_instance_t instance, const uart_config_t *config,
             return -1;
         }
 
-        if (ring_buffer_init(&rx_buffers[instance], rx_buffer->buffer, rx_buffer->size) != 0) {
+        if (ring_buffer_init(&rx_buffers[instance], rx_buffer->buffer, rx_buffer->size, sizeof(uint8_t)) != 0) {
             return -1;
         }
 
