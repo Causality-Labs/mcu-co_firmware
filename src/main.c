@@ -1,12 +1,12 @@
 #include <stdio.h>
 #include "gpio.h"
 #include "uart.h"
+#include "logger.h"
+
+#define MODULE_NAME "MAIN"
 
 const gpio_pin_t led        = {.port = GPIO_PORT_A, .pin = (uint8_t)5U};
 const gpio_pin_t button     = {.port = GPIO_PORT_C, .pin = (uint8_t)13U};
-const uart_instance_t debug = UART_INSTANCE_USART1;
-
-static uint8_t rx_storage[64];
 
 void delay(uint64_t ticks);
 void button_ISR(void);
@@ -14,6 +14,14 @@ void button_ISR(void);
 int main(void)
 {
     int ret = 0;
+    ret = logger_init(LOG_TRANSPORT_UART);
+    if (ret != 0) {
+        for (;;) {
+        }
+    }
+
+    LOG_INFO(MODULE_NAME, "boot");
+    LOG_DEBUG(MODULE_NAME, "logger initialised");
 
     const gpio_config_t button_config = {
         .mode  = GPIO_MODE_INPUT,
@@ -29,36 +37,22 @@ int main(void)
         .pull  = GPIO_PULL_NONE,
     };
 
-    const uart_config_t debug_config = {
-        .baudrate   = UART_BAUD_115200,
-        .data_width = UART_DATA_8BIT,
-        .parity     = UART_PARITY_NONE,
-        .stop_bits  = UART_STOP_1BIT,
-        .mode       = UART_MODE_TX_RX,
-    };
-
-    const uart_rx_buffer_t rx_buf = {
-        .buffer = rx_storage,
-        .size   = sizeof(rx_storage),
-    };
-
-    ret = uart_init(debug, &debug_config, &rx_buf);
-    if (ret != 0) {
-        for (;;) {
-        }
-    }
 
     ret = gpio_init(&led, &led_config);
     if (ret != 0) {
+        LOG_ERROR(MODULE_NAME, "LED gpio_init failed");
         for (;;) {
         }
     }
+    LOG_DEBUG(MODULE_NAME, "LED configured");
 
     ret = gpio_init(&button, &button_config);
     if (ret != 0) {
+        LOG_ERROR(MODULE_NAME, "button gpio_init failed");
         for (;;) {
         }
     }
+    LOG_DEBUG(MODULE_NAME, "button configured");
 
     gpio_irq_config_t irq_cfg = {
         .trigger  = RISING,
@@ -68,20 +62,16 @@ int main(void)
 
     ret = gpio_init_interrupt(&button, &irq_cfg);
     if (ret != 0) {
+        LOG_ERROR(MODULE_NAME, "button IRQ init failed");
         for (;;) {
         }
     }
+    LOG_INFO(MODULE_NAME, "button IRQ armed");
 
-    uint8_t echo_buf[64];
+    LOG_INFO(MODULE_NAME, "entering main loop");
 
     for (;;) {
-
-        int n = uart_read_buffer(debug, echo_buf, (uint16_t)sizeof(echo_buf));
-        if (n > 0) {
-            (void)uart_write_buffer(debug, echo_buf, (uint16_t)n);
-            (void)gpio_toggle(&led);
-        }
-
+        logger_flush();
         delay(10000U);
     }
 
@@ -97,5 +87,6 @@ void delay(uint64_t ticks)
 void button_ISR(void)
 {
     (void)gpio_toggle(&led);
+    LOG_ERROR(MODULE_NAME, "button pressed");
     return;
 }

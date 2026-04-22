@@ -42,8 +42,6 @@ Must use a ring buffer as the bounded queue. I currently have a ring buffer modu
 
 To make this module safe to call in interrupts, we will have a seperate set of log functions in order to call it from an ISR.
 
-- Refactory Ring Buffer data structure to be generic.
-- Make sure it still work with UART.
 ## Write a clock driver
 
 ## Start writng application state machine
