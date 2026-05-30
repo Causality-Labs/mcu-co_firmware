@@ -45,6 +45,13 @@ add_compile_options(
 
 add_compile_definitions(STM32G474xx)
 
+if(DEFINED LOG_LEVEL)
+    add_compile_definitions(LOG_LEVEL=${LOG_LEVEL})
+endif()
+if(DEFINED LOG_ENABLED)
+    add_compile_definitions(LOG_ENABLED=${LOG_ENABLED})
+endif()
+
 set(CMSIS_CORE    ${cmsis_5_SOURCE_DIR}/CMSIS/Core/Include)
 set(CMSIS_DEVICE  ${cmsis_device_g4_SOURCE_DIR}/Include)
 

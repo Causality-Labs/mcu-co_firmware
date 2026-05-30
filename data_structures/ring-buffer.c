@@ -29,7 +29,7 @@ int ring_buffer_init(ring_buffer_t *rb, void *buffer, uint16_t capacity, size_t 
 bool ring_buffer_is_empty(const ring_buffer_t *rb)
 {
     if (rb == NULL) {
-        return -1;
+        return false;
     }
 
     return rb->head == rb->tail;
@@ -38,7 +38,7 @@ bool ring_buffer_is_empty(const ring_buffer_t *rb)
 bool ring_buffer_is_full(const ring_buffer_t *rb)
 {
     if (rb == NULL) {
-        return -1;
+        return false;
     }
 
     return ((rb->head + 1U) & rb->mask) == rb->tail;
