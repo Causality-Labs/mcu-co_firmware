@@ -17,14 +17,7 @@ int main(void)
 {
     int ret = 0;
 
-    ret = logger_init(LOG_TRANSPORT_UART);
-
-    if (ret != 0) {
-        for (;;) {
-        }
-    }
-
-    ret = logger_init(LOG_TRANSPORT_ITM);
+    ret = logger_init();
 
     if (ret != 0) {
         for (;;) {
@@ -33,7 +26,6 @@ int main(void)
 
     LOG_INFO(MODULE_NAME, "boot");
     LOG_DEBUG(MODULE_NAME, "logger initialised");
-    // logger_log(LOG_LEVEL_DEBUG, MODULE_NAME, "boot");
 
     const gpio_config_t button_config = {
         .mode  = GPIO_MODE_INPUT,

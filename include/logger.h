@@ -30,21 +30,14 @@ typedef uint8_t log_level_t;
 #define LOG_LEVEL LOG_LEVEL_INFO
 #endif
 
-#define NUM_OF_LOG_TRANSPORT 2
-
-/** @brief Transport backend used to emit drained log entries. */
-typedef enum {
-    LOG_TRANSPORT_UART = 0U,
-    LOG_TRANSPORT_ITM  = 1U,
-} log_transport_t;
-
 /**
  * @brief Initialise the logger.
  *
- * @param transport Transport backend (UART for production, ITM for dev).
+ * Initialises the bounded log queue and the UART transport.
+ *
  * @return 0 on success, -1 on invalid arguments or already initialised.
  */
-int logger_init(log_transport_t transport);
+int logger_init(void);
 
 /**
  * @brief Drain queued log entries to the active transport.
@@ -54,10 +47,12 @@ int logger_init(log_transport_t transport);
 void logger_flush(void);
 
 /**
- * @brief Enqueue a log entry. ISR-safe and non-blocking.
+ * @brief Enqueue a log entry. Non-blocking, not ISR-safe.
  *
- * Captures the timestamp at call time. Do not call directly — use the
- * LOG_* macros so the compile-time level filter can strip the call.
+ * Single-producer: must be called only from thread / main-loop context.
+ * From an ISR, set a flag and emit the log from the main loop instead.
+ * Do not call directly — use the LOG_* macros so the compile-time level
+ * filter can strip the call.
  */
 void logger_log(log_level_t level, const char *module, const char *message);
 

@@ -17,13 +17,9 @@ typedef struct {
 static log_entry_t log_backing[LOG_QUEUE_DEPTH];
 static ring_buffer_t log_queue;
 
-static bool transport_initialized[NUM_OF_LOG_TRANSPORT] = {
-    [LOG_TRANSPORT_UART] = false,
-    [LOG_TRANSPORT_ITM]  = false,
-};
 static const uart_instance_t uart_logger = UART_INSTANCE_USART1;
 
-static bool logger_queue_initialized = false;
+static bool logger_initialized = false;
 
 static const char *level_str(log_level_t level)
 {
@@ -44,12 +40,7 @@ static const char *level_str(log_level_t level)
 static void emit(const char *s)
 {
     while (*s != '\0') {
-        if (transport_initialized[LOG_TRANSPORT_UART]) {
-            (void)uart_write_byte(uart_logger, (uint8_t)*s);
-        }
-        if (transport_initialized[LOG_TRANSPORT_ITM]) {
-            (void)ITM_SendChar((uint32_t)(uint8_t)*s);
-        }
+        (void)uart_write_byte(uart_logger, (uint8_t)*s);
         s++;
     }
 }
@@ -71,38 +62,21 @@ static int init_uart_logger_hw(void)
     return 0;
 }
 
-int logger_init(log_transport_t transport)
+int logger_init(void)
 {
-
-    if (transport_initialized[transport]) {
+    if (logger_initialized) {
         return -1;
     }
 
-    if (!logger_queue_initialized) {
-        if (ring_buffer_init(&log_queue, log_backing, LOG_QUEUE_DEPTH, sizeof(log_entry_t)) != 0) {
-            return -1;
-        }
+    if (ring_buffer_init(&log_queue, log_backing, LOG_QUEUE_DEPTH, sizeof(log_entry_t)) != 0) {
+        return -1;
     }
 
-    switch (transport) {
-        case LOG_TRANSPORT_UART:
-            /* Caller must init the UART peripheral separately. */
-            if (init_uart_logger_hw() != 0) {
-                return -1;
-            }
-            transport_initialized[transport] = true;
-
-            break;
-
-        case LOG_TRANSPORT_ITM:
-            /* Usually the debugger enables ITM, nothing to do here yet. */
-            break;
-
-        default:
-            return -1;
+    if (init_uart_logger_hw() != 0) {
+        return -1;
     }
 
-    logger_queue_initialized = true;
+    logger_initialized = true;
 
     return 0;
 }
@@ -113,7 +87,7 @@ void logger_log(log_level_t level, const char *module, const char *message)
         return;
     }
 
-    if (!logger_queue_initialized) {
+    if (!logger_initialized) {
         return;
     }
 
@@ -127,7 +101,7 @@ void logger_log(log_level_t level, const char *module, const char *message)
 
 void logger_flush(void)
 {
-    if (!logger_queue_initialized) {
+    if (!logger_initialized) {
         return;
     }
 
