@@ -26,11 +26,12 @@ setup and will run into a lot of issues but it will be worth it for the experien
 What my logger module needs:
 - Severity levels with compile-time filtering (zero cost when disabled)
 - Per-module identification so you can tell which service emitted a log
-- Safe to call from ISRs (matters for E-Stop and peripheral interrupts)
-- Non-blocking at the call site (the logger must never stall a service or an ISR)
+- Non-blocking at the call site (the logger must never stall a service)
 - Timestamps captured at the call site, not at drain time (Maybe)
 - Works over two transports: ITM/SWO during development, UART in production
 - Compile-time-configurable so the entire logger can be stripped from a release build
+
+Do not log from ISRs. ISRs should set a volatile flag/counter and the main loop emits the log. This keeps `logger_log` single-producer and avoids needing a critical section on the ring buffer write.
 
 Logger Module needs a bounded queue data structure and will follow a producer and consumer model.
 
@@ -40,7 +41,7 @@ The variying levels of verbosity will allow change the amount of messages that w
 
 Must use a ring buffer as the bounded queue. I currently have a ring buffer module but it only works for uint8_t data, I must update this ring buffer to be able to handle any data type. Because we are working C not C++ we will update the current ring buffer iteration to use the `void *` and the `memcpy` design pattern. This design pattern is fine for CERT-C complinace but not MISRA-C, however since I am only going for CERT C this is not an issue.
 
-To make this module safe to call in interrupts, we will have a seperate set of log functions in order to call it from an ISR.
+## Write Unit Tests for Logger Module and Ring Buffer Data Structure
 
 ## Write a clock driver
 

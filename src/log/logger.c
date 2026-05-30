@@ -17,19 +17,27 @@ typedef struct {
 static log_entry_t log_backing[LOG_QUEUE_DEPTH];
 static ring_buffer_t log_queue;
 
-static bool transport_initialized[NUM_OF_LOG_TRANSPORT] = { [LOG_TRANSPORT_UART] = false, [LOG_TRANSPORT_ITM] = false};
+static bool transport_initialized[NUM_OF_LOG_TRANSPORT] = {
+    [LOG_TRANSPORT_UART] = false,
+    [LOG_TRANSPORT_ITM]  = false,
+};
 static const uart_instance_t uart_logger = UART_INSTANCE_USART1;
 
-static bool logger_initialized = false;
+static bool logger_queue_initialized = false;
 
 static const char *level_str(log_level_t level)
 {
     switch (level) {
-        case LOG_LEVEL_ERROR: return "ERROR";
-        case LOG_LEVEL_WARN:  return "WARN";
-        case LOG_LEVEL_INFO:  return "INFO";
-        case LOG_LEVEL_DEBUG: return "DEBUG";
-        default:              return "?";
+    case LOG_LEVEL_ERROR:
+        return "ERROR";
+    case LOG_LEVEL_WARN:
+        return "WARN";
+    case LOG_LEVEL_INFO:
+        return "INFO";
+    case LOG_LEVEL_DEBUG:
+        return "DEBUG";
+    default:
+        return "?";
     }
 }
 
@@ -63,7 +71,6 @@ static int init_uart_logger_hw(void)
     return 0;
 }
 
-
 int logger_init(log_transport_t transport)
 {
 
@@ -71,12 +78,10 @@ int logger_init(log_transport_t transport)
         return -1;
     }
 
-    if (!logger_initialized) {
-        if (ring_buffer_init(&log_queue, log_backing,
-                             LOG_QUEUE_DEPTH, sizeof(log_entry_t)) != 0) {
+    if (!logger_queue_initialized) {
+        if (ring_buffer_init(&log_queue, log_backing, LOG_QUEUE_DEPTH, sizeof(log_entry_t)) != 0) {
             return -1;
         }
-        logger_initialized = true;
     }
 
     switch (transport) {
@@ -85,6 +90,7 @@ int logger_init(log_transport_t transport)
             if (init_uart_logger_hw() != 0) {
                 return -1;
             }
+            transport_initialized[transport] = true;
 
             break;
 
@@ -96,18 +102,18 @@ int logger_init(log_transport_t transport)
             return -1;
     }
 
-    transport_initialized[transport] = true;
+    logger_queue_initialized = true;
 
     return 0;
 }
 
 void logger_log(log_level_t level, const char *module, const char *message)
 {
-    if (!logger_initialized) {
+    if (module == NULL || message == NULL) {
         return;
     }
 
-    if (module == NULL || message == NULL) {
+    if (!logger_queue_initialized) {
         return;
     }
 
@@ -119,10 +125,9 @@ void logger_log(log_level_t level, const char *module, const char *message)
     (void)ring_buffer_write(&log_queue, &entry);
 }
 
-
 void logger_flush(void)
 {
-    if (!logger_initialized) {
+    if (!logger_queue_initialized) {
         return;
     }
 

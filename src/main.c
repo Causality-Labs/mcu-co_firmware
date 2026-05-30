@@ -5,8 +5,10 @@
 
 #define MODULE_NAME "MAIN"
 
-const gpio_pin_t led        = {.port = GPIO_PORT_A, .pin = (uint8_t)5U};
-const gpio_pin_t button     = {.port = GPIO_PORT_C, .pin = (uint8_t)13U};
+const gpio_pin_t led    = {.port = GPIO_PORT_A, .pin = (uint8_t)5U};
+const gpio_pin_t button = {.port = GPIO_PORT_C, .pin = (uint8_t)13U};
+
+static volatile uint8_t button_event = 0U;
 
 void delay(uint64_t ticks);
 void button_ISR(void);
@@ -14,7 +16,16 @@ void button_ISR(void);
 int main(void)
 {
     int ret = 0;
+
     ret = logger_init(LOG_TRANSPORT_UART);
+
+    if (ret != 0) {
+        for (;;) {
+        }
+    }
+
+    ret = logger_init(LOG_TRANSPORT_ITM);
+
     if (ret != 0) {
         for (;;) {
         }
@@ -22,6 +33,7 @@ int main(void)
 
     LOG_INFO(MODULE_NAME, "boot");
     LOG_DEBUG(MODULE_NAME, "logger initialised");
+    // logger_log(LOG_LEVEL_DEBUG, MODULE_NAME, "boot");
 
     const gpio_config_t button_config = {
         .mode  = GPIO_MODE_INPUT,
@@ -36,7 +48,6 @@ int main(void)
         .speed = GPIO_SPEED_LOW,
         .pull  = GPIO_PULL_NONE,
     };
-
 
     ret = gpio_init(&led, &led_config);
     if (ret != 0) {
@@ -71,6 +82,10 @@ int main(void)
     LOG_INFO(MODULE_NAME, "entering main loop");
 
     for (;;) {
+        if (button_event != 0U) {
+            button_event = 0U;
+            LOG_INFO(MODULE_NAME, "button pressed");
+        }
         logger_flush();
         delay(10000U);
     }
@@ -87,6 +102,5 @@ void delay(uint64_t ticks)
 void button_ISR(void)
 {
     (void)gpio_toggle(&led);
-    LOG_ERROR(MODULE_NAME, "button pressed");
-    return;
+    button_event = 1U;
 }

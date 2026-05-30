@@ -21,11 +21,21 @@ usage() {
 
 log_args_from_level() {
     case "$1" in
-        error) echo "-DLOG_LEVEL=LOG_LEVEL_ERROR" ;;
-        warn)  echo "-DLOG_LEVEL=LOG_LEVEL_WARN" ;;
-        info)  echo "-DLOG_LEVEL=LOG_LEVEL_INFO" ;;
-        debug) echo "-DLOG_LEVEL=LOG_LEVEL_DEBUG" ;;
-        off)   echo "-DLOG_ENABLED=0" ;;
+        error)
+            echo "-DLOG_ENABLED=1 -DLOG_LEVEL=LOG_LEVEL_ERROR"
+            ;;
+        warn)
+            echo "-DLOG_ENABLED=1 -DLOG_LEVEL=LOG_LEVEL_WARN"
+            ;;
+        info)
+            echo "-DLOG_ENABLED=1 -DLOG_LEVEL=LOG_LEVEL_INFO"
+            ;;
+        debug)
+            echo "-DLOG_ENABLED=1 -DLOG_LEVEL=LOG_LEVEL_DEBUG"
+            ;;
+        off)
+            echo "-DLOG_ENABLED=0 -DLOG_LEVEL=LOG_LEVEL_NONE"
+            ;;
         *)
             echo "Unknown log level: $1. Use error, warn, info, debug, or off." >&2
             exit 1
@@ -96,13 +106,29 @@ LOG_LEVEL_ARG="debug"
 
 while getopts "bcf:Fl:s:h" opt; do
     case "${opt}" in
-        b) cmd_build ;;
-        c) cmd_clean ;;
-        f) cmd_flash "${OPTARG}" ;;
-        F) cmd_format ;;
-        l) LOG_LEVEL_ARG="${OPTARG}" ;;
-        s) cmd_static_analysis "${OPTARG}" ;;
-        h) usage ;;
-        *) usage ;;
+        b)
+            cmd_build
+            ;;
+        c)
+            cmd_clean
+            ;;
+        f)
+            cmd_flash "${OPTARG}"
+            ;;
+        F)
+            cmd_format
+            ;;
+        l)
+            LOG_LEVEL_ARG="${OPTARG}"
+            ;;
+        s)
+            cmd_static_analysis "${OPTARG}"
+            ;;
+        h)
+            usage
+            ;;
+        *)
+            usage
+            ;;
     esac
 done
