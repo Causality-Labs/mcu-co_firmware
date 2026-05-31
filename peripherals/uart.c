@@ -4,10 +4,15 @@
 #include "uart.h"
 #include "gpio.h"
 
-/* HSI at 16 MHz, APB1 and APB2 prescalers = 1 (reset defaults) */
+/* The UART kernel clock is sourced from HSI16 (selected per instance in
+ * uart_init via RCC_CCIPR), so the baud divisor stays valid regardless of
+ * SYSCLK or the APB prescalers. */
 #define UART_CLOCK_HZ      16000000U
 #define LPUART_CLOCK_HZ    16000000U
 #define UART_READY_TIMEOUT 1000U
+
+#define UART_CLK_SRC_HSI16 2U /* RCC_CCIPR USARTxSEL field: 0b10 = HSI16 */
+#define UART_CLK_SRC_MASK  3U
 
 #define UART_IRQ_PRIORITY 5U
 
@@ -40,6 +45,16 @@ static const uart_clk_t uart_clk[NUM_OF_UART_PORTS] = {
     [UART_INSTANCE_UART4]   = {.reg = &RCC->APB1ENR1, .bit = RCC_APB1ENR1_UART4EN},
     [UART_INSTANCE_UART5]   = {.reg = &RCC->APB1ENR1, .bit = RCC_APB1ENR1_UART5EN},
     [UART_INSTANCE_LPUART1] = {.reg = &RCC->APB1ENR2, .bit = RCC_APB1ENR2_LPUART1EN},
+};
+
+/* USARTxSEL field position in RCC_CCIPR for each instance. */
+static const uint32_t uart_clk_src_pos[NUM_OF_UART_PORTS] = {
+    [UART_INSTANCE_USART1]  = RCC_CCIPR_USART1SEL_Pos,
+    [UART_INSTANCE_USART2]  = RCC_CCIPR_USART2SEL_Pos,
+    [UART_INSTANCE_USART3]  = RCC_CCIPR_USART3SEL_Pos,
+    [UART_INSTANCE_UART4]   = RCC_CCIPR_UART4SEL_Pos,
+    [UART_INSTANCE_UART5]   = RCC_CCIPR_UART5SEL_Pos,
+    [UART_INSTANCE_LPUART1] = RCC_CCIPR_LPUART1SEL_Pos,
 };
 
 static const uart_pins_t uart_pins[NUM_OF_UART_PORTS] = {
@@ -211,6 +226,12 @@ int uart_init(uart_instance_t instance, const uart_config_t *config,
     const uart_clk_t *clk       = &uart_clk[instance];
 
     *clk->reg |= clk->bit;
+
+    /* Clock the UART from HSI16 so the baud divisor is independent of SYSCLK. */
+    uint32_t clk_src_pos = uart_clk_src_pos[instance];
+    RCC->CCIPR = (RCC->CCIPR & ~(UART_CLK_SRC_MASK << clk_src_pos)) |
+                 (UART_CLK_SRC_HSI16 << clk_src_pos);
+
     uart_channel->CR1 &= ~USART_CR1_UE;
 
     if (uart_gpio_config(pins, config->mode) != 0) {
