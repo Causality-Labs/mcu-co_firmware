@@ -32,12 +32,9 @@ static USART_TypeDef *const uart_channels[NUM_OF_UART_PORTS] = {
 };
 
 static const rcc_periph_t uart_rcc_periph[NUM_OF_UART_PORTS] = {
-    [UART_INSTANCE_USART1]  = RCC_PERIPH_USART1,
-    [UART_INSTANCE_USART2]  = RCC_PERIPH_USART2,
-    [UART_INSTANCE_USART3]  = RCC_PERIPH_USART3,
-    [UART_INSTANCE_UART4]   = RCC_PERIPH_UART4,
-    [UART_INSTANCE_UART5]   = RCC_PERIPH_UART5,
-    [UART_INSTANCE_LPUART1] = RCC_PERIPH_LPUART1,
+    [UART_INSTANCE_USART1] = RCC_PERIPH_USART1, [UART_INSTANCE_USART2] = RCC_PERIPH_USART2,
+    [UART_INSTANCE_USART3] = RCC_PERIPH_USART3, [UART_INSTANCE_UART4] = RCC_PERIPH_UART4,
+    [UART_INSTANCE_UART5] = RCC_PERIPH_UART5,   [UART_INSTANCE_LPUART1] = RCC_PERIPH_LPUART1,
 };
 
 static const uart_pins_t uart_pins[NUM_OF_UART_PORTS] = {
@@ -244,7 +241,8 @@ int uart_init(uart_instance_t instance, const uart_config_t *config,
             return -1;
         }
 
-        if (ring_buffer_init(&rx_buffers[instance], rx_buffer->buffer, rx_buffer->size, sizeof(uint8_t)) != 0) {
+        if (ring_buffer_init(&rx_buffers[instance], rx_buffer->buffer, rx_buffer->size,
+                             sizeof(uint8_t)) != 0) {
             return -1;
         }
 

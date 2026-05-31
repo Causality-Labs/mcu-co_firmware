@@ -126,8 +126,10 @@ find_program(CLANG_FORMAT clang-format)
 if(CLANG_FORMAT)
     file(GLOB_RECURSE FORMAT_SOURCES
         "${CMAKE_SOURCE_DIR}/src/*.c"
-        "${CMAKE_SOURCE_DIR}/drivers/*.c"
-        "${CMAKE_SOURCE_DIR}/drivers/*.h"
+        "${CMAKE_SOURCE_DIR}/peripherals/*.c"
+        "${CMAKE_SOURCE_DIR}/peripherals/*.h"
+        "${CMAKE_SOURCE_DIR}/data_structures/*.c"
+        "${CMAKE_SOURCE_DIR}/data_structures/*.h"
         "${CMAKE_SOURCE_DIR}/include/*.h"
     )
     add_custom_target(format
