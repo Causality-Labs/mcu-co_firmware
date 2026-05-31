@@ -26,7 +26,33 @@
 /* Settling delay (loop iterations) between the /2 and /1 AHB prescaler steps. */
 #define RCC_BOOST_SETTLE_LOOPS 100U
 
+/* Width of a CCIPR clock-source selection field. */
+#define RCC_CLK_SRC_MASK 3U
+
 static uint32_t rcc_sysclk_hz = 0U;
+
+/* Maps each peripheral to its RCC enable register and bit. */
+typedef struct {
+    volatile uint32_t *enr;
+    uint32_t bit;
+} rcc_periph_clk_t;
+
+static const rcc_periph_clk_t rcc_periph_clk[RCC_PERIPH_COUNT] = {
+    [RCC_PERIPH_GPIOA]   = {&RCC->AHB2ENR, RCC_AHB2ENR_GPIOAEN},
+    [RCC_PERIPH_GPIOB]   = {&RCC->AHB2ENR, RCC_AHB2ENR_GPIOBEN},
+    [RCC_PERIPH_GPIOC]   = {&RCC->AHB2ENR, RCC_AHB2ENR_GPIOCEN},
+    [RCC_PERIPH_GPIOD]   = {&RCC->AHB2ENR, RCC_AHB2ENR_GPIODEN},
+    [RCC_PERIPH_GPIOE]   = {&RCC->AHB2ENR, RCC_AHB2ENR_GPIOEEN},
+    [RCC_PERIPH_GPIOF]   = {&RCC->AHB2ENR, RCC_AHB2ENR_GPIOFEN},
+    [RCC_PERIPH_GPIOG]   = {&RCC->AHB2ENR, RCC_AHB2ENR_GPIOGEN},
+    [RCC_PERIPH_SYSCFG]  = {&RCC->APB2ENR, RCC_APB2ENR_SYSCFGEN},
+    [RCC_PERIPH_USART1]  = {&RCC->APB2ENR, RCC_APB2ENR_USART1EN},
+    [RCC_PERIPH_USART2]  = {&RCC->APB1ENR1, RCC_APB1ENR1_USART2EN},
+    [RCC_PERIPH_USART3]  = {&RCC->APB1ENR1, RCC_APB1ENR1_USART3EN},
+    [RCC_PERIPH_UART4]   = {&RCC->APB1ENR1, RCC_APB1ENR1_UART4EN},
+    [RCC_PERIPH_UART5]   = {&RCC->APB1ENR1, RCC_APB1ENR1_UART5EN},
+    [RCC_PERIPH_LPUART1] = {&RCC->APB1ENR2, RCC_APB1ENR2_LPUART1EN},
+};
 
 /**
  * @brief Poll a register field until it matches an expected value, bounded.
@@ -192,4 +218,59 @@ int rcc_init(rcc_sysclk_t target)
 uint32_t rcc_get_sysclk_hz(void)
 {
     return rcc_sysclk_hz;
+}
+
+int rcc_periph_enable(rcc_periph_t periph)
+{
+    if (periph >= RCC_PERIPH_COUNT) {
+        return -1;
+    }
+
+    *rcc_periph_clk[periph].enr |= rcc_periph_clk[periph].bit;
+    (void)*rcc_periph_clk[periph].enr; /* read-back so the clock is active */
+
+    return 0;
+}
+
+int rcc_periph_disable(rcc_periph_t periph)
+{
+    if (periph >= RCC_PERIPH_COUNT) {
+        return -1;
+    }
+
+    *rcc_periph_clk[periph].enr &= ~rcc_periph_clk[periph].bit;
+
+    return 0;
+}
+
+int rcc_periph_set_clock_source(rcc_periph_t periph, rcc_clk_src_t src)
+{
+    uint32_t pos;
+
+    switch (periph) {
+    case RCC_PERIPH_USART1:
+        pos = RCC_CCIPR_USART1SEL_Pos;
+        break;
+    case RCC_PERIPH_USART2:
+        pos = RCC_CCIPR_USART2SEL_Pos;
+        break;
+    case RCC_PERIPH_USART3:
+        pos = RCC_CCIPR_USART3SEL_Pos;
+        break;
+    case RCC_PERIPH_UART4:
+        pos = RCC_CCIPR_UART4SEL_Pos;
+        break;
+    case RCC_PERIPH_UART5:
+        pos = RCC_CCIPR_UART5SEL_Pos;
+        break;
+    case RCC_PERIPH_LPUART1:
+        pos = RCC_CCIPR_LPUART1SEL_Pos;
+        break;
+    default:
+        return -1;
+    }
+
+    RCC->CCIPR = (RCC->CCIPR & ~(RCC_CLK_SRC_MASK << pos)) | ((uint32_t)src << pos);
+
+    return 0;
 }
