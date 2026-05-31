@@ -1,5 +1,6 @@
 #include <stddef.h>
 #include "gpio.h"
+#include "rcc.h"
 
 void EXTI0_IRQHandler(void);
 void EXTI1_IRQHandler(void);
@@ -9,9 +10,14 @@ void EXTI4_IRQHandler(void);
 void EXTI9_5_IRQHandler(void);
 void EXTI15_10_IRQHandler(void);
 
-static const uint32_t gpio_clk_bits[GPIO_NUM_OF_PORTS] = {
-    RCC_AHB2ENR_GPIOAEN, RCC_AHB2ENR_GPIOBEN, RCC_AHB2ENR_GPIOCEN, RCC_AHB2ENR_GPIODEN,
-    RCC_AHB2ENR_GPIOEEN, RCC_AHB2ENR_GPIOFEN, RCC_AHB2ENR_GPIOGEN,
+static const rcc_periph_t gpio_rcc_periph[GPIO_NUM_OF_PORTS] = {
+    [GPIO_PORT_A] = RCC_PERIPH_GPIOA,
+    [GPIO_PORT_B] = RCC_PERIPH_GPIOB,
+    [GPIO_PORT_C] = RCC_PERIPH_GPIOC,
+    [GPIO_PORT_D] = RCC_PERIPH_GPIOD,
+    [GPIO_PORT_E] = RCC_PERIPH_GPIOE,
+    [GPIO_PORT_F] = RCC_PERIPH_GPIOF,
+    [GPIO_PORT_G] = RCC_PERIPH_GPIOG,
 };
 
 static GPIO_TypeDef *const gpio_ports[GPIO_NUM_OF_PORTS] = {
@@ -90,6 +96,13 @@ static IRQn_Type get_exti_irqn(uint8_t pin)
     }
 }
 
+static int gpio_clock_init(gpio_port_t port)
+{
+    rcc_periph_t gpio_rcc = gpio_rcc_periph[(uint32_t)port];
+
+    return (rcc_periph_enable(gpio_rcc) != 0);
+}
+
 int gpio_init(const gpio_pin_t *gpio, const gpio_config_t *config)
 {
     if (config == NULL) {
@@ -100,9 +113,11 @@ int gpio_init(const gpio_pin_t *gpio, const gpio_config_t *config)
         return -1;
     }
 
-    GPIO_TypeDef *port = get_port(gpio);
+    if (gpio_clock_init(gpio->port) != 0) {
+        return -1;
+    }
 
-    RCC->AHB2ENR |= gpio_clk_bits[(uint32_t)gpio->port];
+    GPIO_TypeDef *port = get_port(gpio);
 
     port->MODER &= ~(0x3U << (gpio->pin * 2U));
     port->MODER |= ((uint32_t)config->mode << (gpio->pin * 2U));
@@ -234,8 +249,9 @@ int gpio_init_interrupt(const gpio_pin_t *gpio, const gpio_irq_config_t *config)
     uint8_t exticr_shift = (gpio->pin % 4U) * 4U;
     uint32_t port_idx    = (uint32_t)gpio->port;
 
-    /*Clock Enable here.*/
-    RCC->APB2ENR |= RCC_APB2ENR_SYSCFGEN;
+    if (rcc_periph_enable(RCC_PERIPH_SYSCFG) != 0) {
+        return -1;
+    }
 
     SYSCFG->EXTICR[exticr_idx] &= ~(0xFU << exticr_shift);
     SYSCFG->EXTICR[exticr_idx] |= (port_idx << exticr_shift);

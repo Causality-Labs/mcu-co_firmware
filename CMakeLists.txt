@@ -93,7 +93,7 @@ add_executable(${PROJECT_NAME}
   src/log/logger.c
   peripherals/uart.c
   peripherals/gpio.c
-  peripherals/clock.c
+  peripherals/rcc.c
   data_structures/ring-buffer.c
   $<TARGET_OBJECTS:vendor>
 )

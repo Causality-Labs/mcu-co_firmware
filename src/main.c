@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include "gpio.h"
 #include "uart.h"
+#include "rcc.h"
 #include "logger.h"
 
 #define MODULE_NAME "MAIN"
@@ -16,6 +17,12 @@ void button_ISR(void);
 int main(void)
 {
     int ret = 0;
+
+    ret = rcc_init(RCC_SYSCLK_HSI_170MHZ);
+    if (ret != 0) {
+        for (;;) {
+        }
+    }
 
     ret = logger_init();
 

@@ -41,9 +41,11 @@ The variying levels of verbosity will allow change the amount of messages that w
 
 Must use a ring buffer as the bounded queue. I currently have a ring buffer module but it only works for uint8_t data, I must update this ring buffer to be able to handle any data type. Because we are working C not C++ we will update the current ring buffer iteration to use the `void *` and the `memcpy` design pattern. This design pattern is fine for CERT-C complinace but not MISRA-C, however since I am only going for CERT C this is not an issue.
 
-## Write Unit Tests for Logger Module and Ring Buffer Data Structure
-
 ## Write a clock driver
 
+
+## Write Unit Tests for Ring Buffer Data Structure
+
 ## Start writng application state machine
+- For GPIO control first
 

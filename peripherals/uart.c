@@ -3,18 +3,16 @@
 #include "ring-buffer.h"
 #include "uart.h"
 #include "gpio.h"
+#include "rcc.h"
 
-/* HSI at 16 MHz, APB1 and APB2 prescalers = 1 (reset defaults) */
+/* The UART kernel clock is sourced from HSI16 (selected per instance in
+ * uart_init via the RCC module), so the baud divisor stays valid regardless
+ * of SYSCLK or the APB prescalers. */
 #define UART_CLOCK_HZ      16000000U
 #define LPUART_CLOCK_HZ    16000000U
 #define UART_READY_TIMEOUT 1000U
 
 #define UART_IRQ_PRIORITY 5U
-
-typedef struct {
-    volatile uint32_t *reg;
-    uint32_t bit;
-} uart_clk_t;
 
 typedef struct {
     gpio_pin_t tx;
@@ -33,13 +31,13 @@ static USART_TypeDef *const uart_channels[NUM_OF_UART_PORTS] = {
     USART1, USART2, USART3, UART4, UART5, LPUART1,
 };
 
-static const uart_clk_t uart_clk[NUM_OF_UART_PORTS] = {
-    [UART_INSTANCE_USART1]  = {.reg = &RCC->APB2ENR, .bit = RCC_APB2ENR_USART1EN},
-    [UART_INSTANCE_USART2]  = {.reg = &RCC->APB1ENR1, .bit = RCC_APB1ENR1_USART2EN},
-    [UART_INSTANCE_USART3]  = {.reg = &RCC->APB1ENR1, .bit = RCC_APB1ENR1_USART3EN},
-    [UART_INSTANCE_UART4]   = {.reg = &RCC->APB1ENR1, .bit = RCC_APB1ENR1_UART4EN},
-    [UART_INSTANCE_UART5]   = {.reg = &RCC->APB1ENR1, .bit = RCC_APB1ENR1_UART5EN},
-    [UART_INSTANCE_LPUART1] = {.reg = &RCC->APB1ENR2, .bit = RCC_APB1ENR2_LPUART1EN},
+static const rcc_periph_t uart_rcc_periph[NUM_OF_UART_PORTS] = {
+    [UART_INSTANCE_USART1]  = RCC_PERIPH_USART1,
+    [UART_INSTANCE_USART2]  = RCC_PERIPH_USART2,
+    [UART_INSTANCE_USART3]  = RCC_PERIPH_USART3,
+    [UART_INSTANCE_UART4]   = RCC_PERIPH_UART4,
+    [UART_INSTANCE_UART5]   = RCC_PERIPH_UART5,
+    [UART_INSTANCE_LPUART1] = RCC_PERIPH_LPUART1,
 };
 
 static const uart_pins_t uart_pins[NUM_OF_UART_PORTS] = {
@@ -187,6 +185,22 @@ static void uart_irq_handler(uart_instance_t instance)
     }
 }
 
+static int uart_init_clock(uart_instance_t instance)
+{
+    rcc_periph_t uart_rcc = uart_rcc_periph[instance];
+
+    if (rcc_periph_enable(uart_rcc) != 0) {
+        return -1;
+    }
+
+    /* Clock the UART from HSI16 so the baud divisor is independent of SYSCLK. */
+    if (rcc_periph_set_clock_source(uart_rcc, RCC_CLK_SRC_HSI16) != 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
 int uart_init(uart_instance_t instance, const uart_config_t *config,
               const uart_rx_buffer_t *rx_buffer)
 {
@@ -208,9 +222,11 @@ int uart_init(uart_instance_t instance, const uart_config_t *config,
     }
 
     USART_TypeDef *uart_channel = uart_channels[instance];
-    const uart_clk_t *clk       = &uart_clk[instance];
 
-    *clk->reg |= clk->bit;
+    if (uart_init_clock(instance) != 0) {
+        return -1;
+    }
+
     uart_channel->CR1 &= ~USART_CR1_UE;
 
     if (uart_gpio_config(pins, config->mode) != 0) {
@@ -269,7 +285,6 @@ int uart_deinit(uart_instance_t instance)
     }
 
     USART_TypeDef *uart_channel = uart_channels[instance];
-    const uart_clk_t *clk       = &uart_clk[instance];
     const uart_pins_t *pins     = &uart_pins[instance];
     uart_mode_t mode            = uart_modes[instance];
 
@@ -282,7 +297,7 @@ int uart_deinit(uart_instance_t instance)
 
     uart_channel->CR1 &= ~(USART_CR1_TE | USART_CR1_RE | USART_CR1_UE);
 
-    *clk->reg &= ~clk->bit;
+    (void)rcc_periph_disable(uart_rcc_periph[instance]);
 
     if (mode == UART_MODE_TX || mode == UART_MODE_TX_RX) {
         if (gpio_deinit(&pins->tx) != 0) {
