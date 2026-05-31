@@ -223,7 +223,7 @@ int uart_init(uart_instance_t instance, const uart_config_t *config,
 
     USART_TypeDef *uart_channel = uart_channels[instance];
 
-    if (uart_init_clock(instance)) {
+    if (uart_init_clock(instance) != 0) {
         return -1;
     }
 
