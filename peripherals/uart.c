@@ -185,6 +185,22 @@ static void uart_irq_handler(uart_instance_t instance)
     }
 }
 
+static int uart_init_clock(uart_instance_t instance)
+{
+    rcc_periph_t uart_rcc = uart_rcc_periph[instance];
+
+    if (rcc_periph_enable(uart_rcc) != 0) {
+        return -1;
+    }
+
+    /* Clock the UART from HSI16 so the baud divisor is independent of SYSCLK. */
+    if (rcc_periph_set_clock_source(uart_rcc, RCC_CLK_SRC_HSI16) != 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
 int uart_init(uart_instance_t instance, const uart_config_t *config,
               const uart_rx_buffer_t *rx_buffer)
 {
@@ -206,13 +222,8 @@ int uart_init(uart_instance_t instance, const uart_config_t *config,
     }
 
     USART_TypeDef *uart_channel = uart_channels[instance];
-    rcc_periph_t periph         = uart_rcc_periph[instance];
 
-    if (rcc_periph_enable(periph) != 0) {
-        return -1;
-    }
-    /* Clock the UART from HSI16 so the baud divisor is independent of SYSCLK. */
-    if (rcc_periph_set_clock_source(periph, RCC_CLK_SRC_HSI16) != 0) {
+    if (uart_init_clock(instance)) {
         return -1;
     }
 

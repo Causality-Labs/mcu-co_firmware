@@ -96,6 +96,13 @@ static IRQn_Type get_exti_irqn(uint8_t pin)
     }
 }
 
+static int gpio_clock_init(gpio_port_t port)
+{
+    rcc_periph_t gpio_rcc = gpio_rcc_periph[(uint32_t)port];
+
+    return (rcc_periph_enable(gpio_rcc) != 0);
+}
+
 int gpio_init(const gpio_pin_t *gpio, const gpio_config_t *config)
 {
     if (config == NULL) {
@@ -106,9 +113,7 @@ int gpio_init(const gpio_pin_t *gpio, const gpio_config_t *config)
         return -1;
     }
 
-    rcc_periph_t gpio_rcc = gpio_rcc_periph[(uint32_t)gpio->port];
-
-    if (rcc_periph_enable(gpio_rcc) != 0) {
+    if (gpio_clock_init(gpio->port) != 0) {
         return -1;
     }
 
