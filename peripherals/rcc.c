@@ -142,8 +142,7 @@ static int rcc_start_pll(void)
         return -1;
     }
 
-    RCC->PLLCFGR = RCC_PLLCFGR_PLLSRC_HSI |
-                   (((uint32_t)RCC_PLL_M - 1U) << RCC_PLLCFGR_PLLM_Pos) |
+    RCC->PLLCFGR = RCC_PLLCFGR_PLLSRC_HSI | (((uint32_t)RCC_PLL_M - 1U) << RCC_PLLCFGR_PLLM_Pos) |
                    ((uint32_t)RCC_PLL_N << RCC_PLLCFGR_PLLN_Pos) |
                    (((uint32_t)RCC_PLL_R / 2U - 1U) << RCC_PLLCFGR_PLLR_Pos) |
                    RCC_PLLCFGR_PLLREN; /* enable the PLLR (SYSCLK) output */

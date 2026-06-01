@@ -56,11 +56,11 @@ typedef enum {
 
 /** @brief UART peripheral configuration parameters. */
 typedef struct {
-    uart_baudrate_t   baudrate;
-    uart_parity_t     parity;
+    uart_baudrate_t baudrate;
+    uart_parity_t parity;
     uart_data_width_t data_width;
-    uart_stop_bits_t  stop_bits;
-    uart_mode_t       mode;
+    uart_stop_bits_t stop_bits;
+    uart_mode_t mode;
 } uart_config_t;
 
 /**
@@ -70,8 +70,8 @@ typedef struct {
  * @p size must be a power of 2.
  */
 typedef struct {
-    uint8_t  *buffer;
-    uint16_t  size;
+    uint8_t *buffer;
+    uint16_t size;
 } uart_rx_buffer_t;
 
 /**
