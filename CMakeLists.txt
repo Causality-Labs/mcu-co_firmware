@@ -94,6 +94,7 @@ add_executable(${PROJECT_NAME}
   peripherals/uart.c
   peripherals/gpio.c
   peripherals/rcc.c
+  peripherals/systick.c
   data_structures/ring-buffer.c
   $<TARGET_OBJECTS:vendor>
 )

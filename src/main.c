@@ -3,6 +3,7 @@
 #include "uart.h"
 #include "rcc.h"
 #include "logger.h"
+#include "systick.h"
 
 #define MODULE_NAME "MAIN"
 
@@ -11,7 +12,6 @@ const gpio_pin_t button = {.port = GPIO_PORT_C, .pin = (uint8_t)13U};
 
 static volatile uint8_t button_event = 0U;
 
-void delay(uint64_t ticks);
 void button_ISR(void);
 
 int main(void)
@@ -19,6 +19,12 @@ int main(void)
     int ret = 0;
 
     ret = rcc_init(RCC_SYSCLK_HSI_170MHZ);
+    if (ret != 0) {
+        for (;;) {
+        }
+    }
+
+    ret = systick_init();
     if (ret != 0) {
         for (;;) {
         }
@@ -85,21 +91,17 @@ int main(void)
             button_event = 0U;
             LOG_INFO(MODULE_NAME, "button pressed");
         }
+
         logger_flush();
-        delay(10000U);
+        (void)gpio_toggle(&led);
+        delay_ms(1U);
     }
 
     return 0;
 }
 
-void delay(uint64_t ticks)
-{
-    for (volatile uint64_t i = 0U; i < ticks; i++) {
-    }
-}
-
 void button_ISR(void)
 {
-    (void)gpio_toggle(&led);
+    // (void)gpio_toggle(&led);
     button_event = 1U;
 }
