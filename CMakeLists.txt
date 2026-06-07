@@ -96,6 +96,7 @@ add_executable(${PROJECT_NAME}
   peripherals/rcc.c
   peripherals/systick.c
   data_structures/ring-buffer.c
+  common/status.c
   $<TARGET_OBJECTS:vendor>
 )
 
@@ -105,6 +106,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
   include
   peripherals
   data_structures
+  common
   ${CMSIS_CORE}
   ${CMSIS_DEVICE}
 )
@@ -131,6 +133,8 @@ if(CLANG_FORMAT)
         "${CMAKE_SOURCE_DIR}/peripherals/*.h"
         "${CMAKE_SOURCE_DIR}/data_structures/*.c"
         "${CMAKE_SOURCE_DIR}/data_structures/*.h"
+        "${CMAKE_SOURCE_DIR}/common/*.c"
+        "${CMAKE_SOURCE_DIR}/common/*.h"
         "${CMAKE_SOURCE_DIR}/include/*.h"
     )
     add_custom_target(format

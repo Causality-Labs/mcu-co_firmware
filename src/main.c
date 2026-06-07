@@ -31,7 +31,6 @@ int main(void)
     }
 
     ret = logger_init();
-
     if (ret != 0) {
         for (;;) {
         }
@@ -54,16 +53,14 @@ int main(void)
         .pull  = GPIO_PULL_NONE,
     };
 
-    ret = gpio_init(&led, &led_config);
-    if (ret != 0) {
+    if (gpio_init(&led, &led_config) != STATUS_OK) {
         LOG_ERROR(MODULE_NAME, "LED gpio_init failed");
         for (;;) {
         }
     }
     LOG_DEBUG(MODULE_NAME, "LED configured");
 
-    ret = gpio_init(&button, &button_config);
-    if (ret != 0) {
+    if (gpio_init(&button, &button_config) != STATUS_OK) {
         LOG_ERROR(MODULE_NAME, "button gpio_init failed");
         for (;;) {
         }
@@ -76,8 +73,7 @@ int main(void)
         .priority = 5,
     };
 
-    ret = gpio_init_interrupt(&button, &irq_cfg);
-    if (ret != 0) {
+    if (gpio_init_interrupt(&button, &irq_cfg) != STATUS_OK) {
         LOG_ERROR(MODULE_NAME, "button IRQ init failed");
         for (;;) {
         }
@@ -93,8 +89,7 @@ int main(void)
         }
 
         logger_flush();
-        (void)gpio_toggle(&led);
-        delay_ms(1U);
+        delay_ms(500U);
     }
 
     return 0;
@@ -102,6 +97,6 @@ int main(void)
 
 void button_ISR(void)
 {
-    // (void)gpio_toggle(&led);
+    (void)gpio_toggle(&led);
     button_event = 1U;
 }
