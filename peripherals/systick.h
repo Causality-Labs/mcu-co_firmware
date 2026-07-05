@@ -2,6 +2,7 @@
 #define SYSTICK_H
 
 #include <stdint.h>
+#include "status.h"
 
 /**
  * @brief Start the SysTick 1 ms time base.
@@ -11,10 +12,11 @@
  * rcc_init() has succeeded, as the reload value is derived from
  * rcc_get_sysclk_hz().
  *
- * @return 0 on success, -1 if the system clock is not configured or the
- *         required reload value does not fit the 24-bit SysTick counter.
+ * @return STATUS_OK on success, STATUS_ERR_NOT_INIT if rcc_init() has not
+ *         succeeded, STATUS_ERR_INVALID_STATE if the reload value overflows
+ *         the 24-bit SysTick counter.
  */
-int systick_init(void);
+status_t systick_init(void);
 
 /**
  * @brief Milliseconds elapsed since systick_init().

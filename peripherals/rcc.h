@@ -2,6 +2,7 @@
 #define RCC_H
 
 #include <stdint.h>
+#include "status.h"
 
 /**
  * @brief Selectable system clock (SYSCLK) targets.
@@ -60,9 +61,10 @@ typedef enum {
  * returns an error instead of hanging.
  *
  * @param target Desired system clock configuration
- * @return 0 on success, -1 on invalid target or hardware timeout
+ * @return STATUS_OK on success, STATUS_ERR_INVALID_ARG on unknown target,
+ *         STATUS_ERR_TIMEOUT if a hardware ready-flag wait expires
  */
-int rcc_init(rcc_sysclk_t target);
+status_t rcc_init(rcc_sysclk_t target);
 
 /**
  * @brief Get the currently configured SYSCLK frequency.
@@ -78,17 +80,17 @@ uint32_t rcc_get_sysclk_hz(void);
  * accesses the peripheral.
  *
  * @param periph Peripheral to clock
- * @return 0 on success, -1 if @p periph is invalid
+ * @return STATUS_OK on success, STATUS_ERR_INVALID_ARG if @p periph is out of range
  */
-int rcc_periph_enable(rcc_periph_t periph);
+status_t rcc_periph_enable(rcc_periph_t periph);
 
 /**
  * @brief Disable the bus clock for a peripheral.
  *
  * @param periph Peripheral to gate off
- * @return 0 on success, -1 if @p periph is invalid
+ * @return STATUS_OK on success, STATUS_ERR_INVALID_ARG if @p periph is out of range
  */
-int rcc_periph_disable(rcc_periph_t periph);
+status_t rcc_periph_disable(rcc_periph_t periph);
 
 /**
  * @brief Select the kernel clock source for a peripheral (CCIPR).
@@ -98,8 +100,8 @@ int rcc_periph_disable(rcc_periph_t periph);
  *
  * @param periph Peripheral to configure
  * @param src    Desired clock source
- * @return 0 on success, -1 if @p periph has no selectable clock
+ * @return STATUS_OK on success, STATUS_ERR_UNSUPPORTED if @p periph has no selectable clock
  */
-int rcc_periph_set_clock_source(rcc_periph_t periph, rcc_clk_src_t src);
+status_t rcc_periph_set_clock_source(rcc_periph_t periph, rcc_clk_src_t src);
 
 #endif /* RCC_H */

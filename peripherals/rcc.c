@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include "stm32g474xx.h"
 #include "rcc.h"
+#include "status.h"
 
 /*
  * PLL settings for 170 MHz SYSCLK from the 16 MHz HSI16:
@@ -186,32 +187,32 @@ static int rcc_switch_to_pll(void)
     return 0;
 }
 
-int rcc_init(rcc_sysclk_t target)
+status_t rcc_init(rcc_sysclk_t target)
 {
     if (target != RCC_SYSCLK_HSI_170MHZ) {
-        return -1;
+        return STATUS_ERR_INVALID_ARG;
     }
 
     if (rcc_enable_boost() != 0) {
-        return -1;
+        return STATUS_ERR_TIMEOUT;
     }
 
     if (rcc_configure_flash() != 0) {
-        return -1;
+        return STATUS_ERR_TIMEOUT;
     }
 
     if (rcc_start_pll() != 0) {
-        return -1;
+        return STATUS_ERR_TIMEOUT;
     }
 
     if (rcc_switch_to_pll() != 0) {
-        return -1;
+        return STATUS_ERR_TIMEOUT;
     }
 
     rcc_sysclk_hz   = RCC_SYSCLK_HSI_170MHZ_HZ;
     SystemCoreClock = RCC_SYSCLK_HSI_170MHZ_HZ;
 
-    return 0;
+    return STATUS_OK;
 }
 
 uint32_t rcc_get_sysclk_hz(void)
@@ -219,30 +220,30 @@ uint32_t rcc_get_sysclk_hz(void)
     return rcc_sysclk_hz;
 }
 
-int rcc_periph_enable(rcc_periph_t periph)
+status_t rcc_periph_enable(rcc_periph_t periph)
 {
     if (periph >= RCC_PERIPH_COUNT) {
-        return -1;
+        return STATUS_ERR_INVALID_ARG;
     }
 
     *rcc_periph_clk[periph].enr |= rcc_periph_clk[periph].bit;
     (void)*rcc_periph_clk[periph].enr; /* read-back so the clock is active */
 
-    return 0;
+    return STATUS_OK;
 }
 
-int rcc_periph_disable(rcc_periph_t periph)
+status_t rcc_periph_disable(rcc_periph_t periph)
 {
     if (periph >= RCC_PERIPH_COUNT) {
-        return -1;
+        return STATUS_ERR_INVALID_ARG;
     }
 
     *rcc_periph_clk[periph].enr &= ~rcc_periph_clk[periph].bit;
 
-    return 0;
+    return STATUS_OK;
 }
 
-int rcc_periph_set_clock_source(rcc_periph_t periph, rcc_clk_src_t src)
+status_t rcc_periph_set_clock_source(rcc_periph_t periph, rcc_clk_src_t src)
 {
     uint32_t pos;
 
@@ -266,10 +267,10 @@ int rcc_periph_set_clock_source(rcc_periph_t periph, rcc_clk_src_t src)
         pos = RCC_CCIPR_LPUART1SEL_Pos;
         break;
     default:
-        return -1;
+        return STATUS_ERR_UNSUPPORTED;
     }
 
     RCC->CCIPR = (RCC->CCIPR & ~(RCC_CLK_SRC_MASK << pos)) | ((uint32_t)src << pos);
 
-    return 0;
+    return STATUS_OK;
 }
