@@ -137,7 +137,7 @@ static void set_mode(USART_TypeDef *uart_channel, const uart_config_t *config)
     }
 }
 
-static int uart_gpio_config(const uart_pins_t *pins, uart_mode_t mode)
+static status_t uart_gpio_config(const uart_pins_t *pins, uart_mode_t mode)
 {
     gpio_config_t af_config = {
         .mode  = GPIO_MODE_AF,
@@ -146,25 +146,31 @@ static int uart_gpio_config(const uart_pins_t *pins, uart_mode_t mode)
         .pull  = GPIO_PULL_NONE,
     };
 
+    status_t status;
+
     if (mode == UART_MODE_TX || mode == UART_MODE_TX_RX) {
-        if (gpio_init(&pins->tx, &af_config) != 0) {
-            return -1;
+        status = gpio_init(&pins->tx, &af_config);
+        if (status != STATUS_OK) {
+            return status;
         }
-        if (gpio_set_af(&pins->tx, pins->af) != 0) {
-            return -1;
+        status = gpio_set_af(&pins->tx, pins->af);
+        if (status != STATUS_OK) {
+            return status;
         }
     }
 
     if (mode == UART_MODE_RX || mode == UART_MODE_TX_RX) {
-        if (gpio_init(&pins->rx, &af_config) != 0) {
-            return -1;
+        status = gpio_init(&pins->rx, &af_config);
+        if (status != STATUS_OK) {
+            return status;
         }
-        if (gpio_set_af(&pins->rx, pins->af) != 0) {
-            return -1;
+        status = gpio_set_af(&pins->rx, pins->af);
+        if (status != STATUS_OK) {
+            return status;
         }
     }
 
-    return 0;
+    return STATUS_OK;
 }
 
 static void uart_irq_handler(uart_instance_t instance)
@@ -182,52 +188,54 @@ static void uart_irq_handler(uart_instance_t instance)
     }
 }
 
-static int uart_init_clock(uart_instance_t instance)
+static status_t uart_init_clock(uart_instance_t instance)
 {
     rcc_periph_t uart_rcc = uart_rcc_periph[instance];
 
     if (rcc_periph_enable(uart_rcc) != 0) {
-        return -1;
+        return STATUS_ERR_NOT_INIT;
     }
 
     /* Clock the UART from HSI16 so the baud divisor is independent of SYSCLK. */
     if (rcc_periph_set_clock_source(uart_rcc, RCC_CLK_SRC_HSI16) != 0) {
-        return -1;
+        return STATUS_ERR_NOT_INIT;
     }
 
-    return 0;
+    return STATUS_OK;
 }
 
-int uart_init(uart_instance_t instance, const uart_config_t *config,
-              const uart_rx_buffer_t *rx_buffer)
+status_t uart_init(uart_instance_t instance, const uart_config_t *config,
+                   const uart_rx_buffer_t *rx_buffer)
 {
     if (config == NULL) {
-        return -1;
+        return STATUS_ERR_INVALID_ARG;
     }
 
     if (instance >= NUM_OF_UART_PORTS) {
-        return -1;
+        return STATUS_ERR_INVALID_ARG;
     }
 
     if (uart_initialized[instance]) {
-        return -1;
+        return STATUS_ERR_BUSY;
     }
 
     const uart_pins_t *pins = &uart_pins[instance];
     if (is_gpio_pin_being_used(pins)) {
-        return -1;
+        return STATUS_ERR_BUSY;
     }
 
     USART_TypeDef *uart_channel = uart_channels[instance];
 
-    if (uart_init_clock(instance) != 0) {
-        return -1;
+    status_t status = uart_init_clock(instance);
+    if (status != STATUS_OK) {
+        return status;
     }
 
     uart_channel->CR1 &= ~USART_CR1_UE;
 
-    if (uart_gpio_config(pins, config->mode) != 0) {
-        return -1;
+    status = uart_gpio_config(pins, config->mode);
+    if (status != STATUS_OK) {
+        return status;
     }
 
     set_data_width(uart_channel, config);
@@ -238,12 +246,12 @@ int uart_init(uart_instance_t instance, const uart_config_t *config,
 
     if (config->mode == UART_MODE_RX || config->mode == UART_MODE_TX_RX) {
         if (rx_buffer == NULL) {
-            return -1;
+            return STATUS_ERR_INVALID_ARG;
         }
 
         if (ring_buffer_init(&rx_buffers[instance], rx_buffer->buffer, rx_buffer->size,
-                             sizeof(uint8_t)) != 0) {
-            return -1;
+                             sizeof(uint8_t)) != STATUS_OK) {
+            return STATUS_ERR_INVALID_ARG;
         }
 
         uart_channel->CR1 |= USART_CR1_RXNEIE;
@@ -256,30 +264,30 @@ int uart_init(uart_instance_t instance, const uart_config_t *config,
 
     if (config->mode == UART_MODE_TX || config->mode == UART_MODE_TX_RX) {
         if (wait_for_ack(uart_channel, USART_ISR_TEACK) != 0) {
-            return -1;
+            return STATUS_ERR_TIMEOUT;
         }
     }
 
     if (config->mode == UART_MODE_RX || config->mode == UART_MODE_TX_RX) {
         if (wait_for_ack(uart_channel, USART_ISR_REACK) != 0) {
-            return -1;
+            return STATUS_ERR_TIMEOUT;
         }
     }
 
     uart_modes[instance]       = config->mode;
     uart_initialized[instance] = true;
 
-    return 0;
+    return STATUS_OK;
 }
 
-int uart_deinit(uart_instance_t instance)
+status_t uart_deinit(uart_instance_t instance)
 {
     if (instance >= NUM_OF_UART_PORTS) {
-        return -1;
+        return STATUS_ERR_INVALID_ARG;
     }
 
     if (!uart_initialized[instance]) {
-        return -1;
+        return STATUS_ERR_NOT_INIT;
     }
 
     USART_TypeDef *uart_channel = uart_channels[instance];
@@ -297,121 +305,132 @@ int uart_deinit(uart_instance_t instance)
 
     (void)rcc_periph_disable(uart_rcc_periph[instance]);
 
+    status_t status;
+
     if (mode == UART_MODE_TX || mode == UART_MODE_TX_RX) {
-        if (gpio_deinit(&pins->tx) != 0) {
-            return -1;
+        status = gpio_deinit(&pins->tx);
+        if (status != STATUS_OK) {
+            return status;
         }
     }
 
     if (mode == UART_MODE_RX || mode == UART_MODE_TX_RX) {
-        if (gpio_deinit(&pins->rx) != 0) {
-            return -1;
+        status = gpio_deinit(&pins->rx);
+        if (status != STATUS_OK) {
+            return status;
         }
     }
 
     uart_initialized[instance] = false;
 
-    return 0;
+    return STATUS_OK;
 }
 
-static inline int uart_write_byte_hw(USART_TypeDef *uart_channel, uint8_t data)
+static inline status_t uart_write_byte_hw(USART_TypeDef *uart_channel, uint8_t data)
 {
     if (wait_for_ack(uart_channel, USART_ISR_TXE) != 0) {
-        return -1;
+        return STATUS_ERR_TIMEOUT;
     }
 
     uart_channel->TDR = (uint32_t)data;
 
-    return 0;
+    return STATUS_OK;
 }
 
-static inline int uart_read_byte_hw(uart_instance_t instance, uint8_t *data)
+static inline status_t uart_read_byte_hw(uart_instance_t instance, uint8_t *data)
 {
-    return ring_buffer_read(&rx_buffers[instance], data);
+    return (ring_buffer_read(&rx_buffers[instance], data) == STATUS_OK) ? STATUS_OK
+                                                                        : STATUS_ERR_EMPTY;
 }
 
-int uart_write_byte(uart_instance_t instance, const uint8_t data)
+status_t uart_write_byte(uart_instance_t instance, const uint8_t data)
 {
     if (instance >= NUM_OF_UART_PORTS) {
-        return -1;
+        return STATUS_ERR_INVALID_ARG;
     }
 
     if (!uart_initialized[instance]) {
-        return -1;
+        return STATUS_ERR_NOT_INIT;
     }
 
     if (uart_modes[instance] != UART_MODE_TX && uart_modes[instance] != UART_MODE_TX_RX) {
-        return -1;
+        return STATUS_ERR_INVALID_STATE;
     }
 
     return uart_write_byte_hw(uart_channels[instance], data);
 }
 
-int uart_read_byte(uart_instance_t instance, uint8_t *data)
+status_t uart_read_byte(uart_instance_t instance, uint8_t *data)
 {
     if (data == NULL || instance >= NUM_OF_UART_PORTS) {
-        return -1;
+        return STATUS_ERR_INVALID_ARG;
     }
 
     if (!uart_initialized[instance]) {
-        return -1;
+        return STATUS_ERR_NOT_INIT;
     }
 
     if (uart_modes[instance] != UART_MODE_RX && uart_modes[instance] != UART_MODE_TX_RX) {
-        return -1;
+        return STATUS_ERR_INVALID_STATE;
     }
 
     return uart_read_byte_hw(instance, data);
 }
 
-int uart_write_buffer(uart_instance_t instance, const uint8_t *data, uint16_t length)
+status_t uart_write_buffer(uart_instance_t instance, const uint8_t *data, uint16_t length)
 {
     if (data == NULL || instance >= NUM_OF_UART_PORTS) {
-        return -1;
+        return STATUS_ERR_INVALID_ARG;
     }
 
     if (!uart_initialized[instance]) {
-        return -1;
+        return STATUS_ERR_NOT_INIT;
     }
 
     if (uart_modes[instance] != UART_MODE_TX && uart_modes[instance] != UART_MODE_TX_RX) {
-        return -1;
+        return STATUS_ERR_INVALID_STATE;
     }
 
     USART_TypeDef *uart_channel = uart_channels[instance];
 
     for (uint16_t idx = 0U; idx < length; idx++) {
-        if (uart_write_byte_hw(uart_channel, data[idx]) != 0) {
-            return -1;
+        status_t status = uart_write_byte_hw(uart_channel, data[idx]);
+        if (status != STATUS_OK) {
+            return status;
         }
     }
 
-    return 0;
+    return STATUS_OK;
 }
 
-int uart_read_buffer(uart_instance_t instance, uint8_t *data, uint16_t length)
+status_t uart_read_buffer(uart_instance_t instance, uint8_t *data, uint16_t length,
+                          uint16_t *bytes_read)
 {
-    if (data == NULL || instance >= NUM_OF_UART_PORTS) {
-        return -1;
+    if (data == NULL || bytes_read == NULL || instance >= NUM_OF_UART_PORTS) {
+        return STATUS_ERR_INVALID_ARG;
     }
 
+    *bytes_read = 0U;
+
     if (!uart_initialized[instance]) {
-        return -1;
+        return STATUS_ERR_NOT_INIT;
     }
 
     if (uart_modes[instance] != UART_MODE_RX && uart_modes[instance] != UART_MODE_TX_RX) {
-        return -1;
+        return STATUS_ERR_INVALID_STATE;
     }
 
     uint16_t count = 0U;
     while (count < length) {
-        if (uart_read_byte_hw(instance, &data[count]) != 0) {
+        if (uart_read_byte_hw(instance, &data[count]) != STATUS_OK) {
             break;
         }
         count++;
     }
 
-    return (int)count;
+    *bytes_read = count;
+
+    return STATUS_OK;
 }
 
 void USART1_IRQHandler(void)

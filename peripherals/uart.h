@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include "stm32g474xx.h"
 #include "gpio.h"
+#include "status.h"
 
 #define NUM_OF_UART_PORTS 6
 
@@ -84,10 +85,13 @@ typedef struct {
  * @param instance  UART peripheral to initialise
  * @param config    Pointer to frame and mode configuration
  * @param rx_buffer Caller-supplied RX buffer; required for RX/TX_RX modes, NULL for TX-only
- * @return 0 on success, -1 on invalid arguments or peripheral already initialised
+ * @return STATUS_OK on success, STATUS_ERR_INVALID_ARG on bad arguments,
+ *         STATUS_ERR_BUSY if already initialised or its pins are in use,
+ *         STATUS_ERR_NOT_INIT if the clock/GPIO could not be brought up,
+ *         STATUS_ERR_TIMEOUT if the peripheral did not become ready.
  */
-int uart_init(uart_instance_t instance, const uart_config_t *config,
-              const uart_rx_buffer_t *rx_buffer);
+status_t uart_init(uart_instance_t instance, const uart_config_t *config,
+                   const uart_rx_buffer_t *rx_buffer);
 
 /**
  * @brief Deinitialise a UART peripheral.
@@ -97,9 +101,10 @@ int uart_init(uart_instance_t instance, const uart_config_t *config,
  * NVIC interrupt if RX was active.
  *
  * @param instance UART peripheral to deinitialise
- * @return 0 on success, -1 if not initialised
+ * @return STATUS_OK on success, STATUS_ERR_INVALID_ARG on an invalid instance,
+ *         STATUS_ERR_NOT_INIT if the peripheral was not initialised.
  */
-int uart_deinit(uart_instance_t instance);
+status_t uart_deinit(uart_instance_t instance);
 
 /**
  * @brief Transmit a single byte.
@@ -108,9 +113,12 @@ int uart_deinit(uart_instance_t instance);
  *
  * @param instance UART peripheral to write to
  * @param data     Byte to transmit
- * @return 0 on success, -1 on timeout or invalid instance
+ * @return STATUS_OK on success, STATUS_ERR_INVALID_ARG on an invalid instance,
+ *         STATUS_ERR_NOT_INIT if not initialised, STATUS_ERR_INVALID_STATE if
+ *         the instance is not in a TX-capable mode, STATUS_ERR_TIMEOUT if the
+ *         transmit register did not empty in time.
  */
-int uart_write_byte(uart_instance_t instance, const uint8_t data);
+status_t uart_write_byte(uart_instance_t instance, const uint8_t data);
 
 /**
  * @brief Transmit a buffer of bytes.
@@ -121,32 +129,42 @@ int uart_write_byte(uart_instance_t instance, const uint8_t data);
  * @param instance UART peripheral to write to
  * @param data     Pointer to transmit buffer
  * @param length   Number of bytes to transmit
- * @return 0 on success, -1 on timeout or invalid arguments
+ * @return STATUS_OK on success, STATUS_ERR_INVALID_ARG on bad arguments,
+ *         STATUS_ERR_NOT_INIT if not initialised, STATUS_ERR_INVALID_STATE if
+ *         the instance is not in a TX-capable mode, STATUS_ERR_TIMEOUT if a
+ *         byte timed out waiting for the transmit register to empty.
  */
-int uart_write_buffer(uart_instance_t instance, const uint8_t *data, uint16_t length);
+status_t uart_write_buffer(uart_instance_t instance, const uint8_t *data, uint16_t length);
 
 /**
  * @brief Read a single byte from the RX ring buffer.
  *
- * Returns immediately. If no byte is available, returns -1.
+ * Returns immediately if no byte is available.
  *
  * @param instance UART peripheral to read from
  * @param data     Output parameter for the received byte
- * @return 0 on success, -1 if buffer empty or invalid instance
+ * @return STATUS_OK on success, STATUS_ERR_EMPTY if no byte is available,
+ *         STATUS_ERR_INVALID_ARG on bad arguments, STATUS_ERR_NOT_INIT if not
+ *         initialised, STATUS_ERR_INVALID_STATE if not in an RX-capable mode.
  */
-int uart_read_byte(uart_instance_t instance, uint8_t *data);
+status_t uart_read_byte(uart_instance_t instance, uint8_t *data);
 
 /**
  * @brief Read available bytes from the RX ring buffer.
  *
- * Drains the ring buffer up to @p length bytes. Stops early if the
- * buffer empties before @p length is reached.
+ * Drains the ring buffer up to @p length bytes. Stops early if the buffer
+ * empties before @p length is reached; draining an empty buffer is not an
+ * error and yields @p bytes_read == 0 with STATUS_OK.
  *
- * @param instance UART peripheral to read from
- * @param data     Output buffer to write received bytes into
- * @param length   Maximum number of bytes to read
- * @return Number of bytes read (0 to length), or -1 on invalid arguments
+ * @param instance   UART peripheral to read from
+ * @param data       Output buffer to write received bytes into
+ * @param length     Maximum number of bytes to read
+ * @param bytes_read Output parameter set to the number of bytes read (0 to length)
+ * @return STATUS_OK on success, STATUS_ERR_INVALID_ARG on bad arguments,
+ *         STATUS_ERR_NOT_INIT if not initialised, STATUS_ERR_INVALID_STATE if
+ *         the instance is not in an RX-capable mode.
  */
-int uart_read_buffer(uart_instance_t instance, uint8_t *data, uint16_t length);
+status_t uart_read_buffer(uart_instance_t instance, uint8_t *data, uint16_t length,
+                          uint16_t *bytes_read);
 
 #endif /* UART_H */

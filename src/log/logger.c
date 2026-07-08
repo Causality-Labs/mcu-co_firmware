@@ -68,7 +68,8 @@ int logger_init(void)
         return -1;
     }
 
-    if (ring_buffer_init(&log_queue, log_backing, LOG_QUEUE_DEPTH, sizeof(log_entry_t)) != 0) {
+    if (ring_buffer_init(&log_queue, log_backing, LOG_QUEUE_DEPTH, sizeof(log_entry_t)) !=
+        STATUS_OK) {
         return -1;
     }
 
@@ -106,7 +107,7 @@ void logger_flush(void)
     }
 
     log_entry_t entry;
-    while (ring_buffer_read(&log_queue, &entry) == 0) {
+    while (ring_buffer_read(&log_queue, &entry) == STATUS_OK) {
         emit("[");
         emit(level_str(entry.level));
         emit("] ");

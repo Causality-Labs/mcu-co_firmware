@@ -100,18 +100,18 @@ static int gpio_clock_init(gpio_port_t port)
     return (rcc_periph_enable(gpio_rcc) != 0);
 }
 
-int gpio_init(const gpio_pin_t *gpio, const gpio_config_t *config)
+status_t gpio_init(const gpio_pin_t *gpio, const gpio_config_t *config)
 {
     if (config == NULL) {
-        return -1;
+        return STATUS_ERR_INVALID_ARG;
     }
 
     if (!is_valid_pin(gpio)) {
-        return -1;
+        return STATUS_ERR_INVALID_PIN;
     }
 
     if (gpio_clock_init(gpio->port) != 0) {
-        return -1;
+        return STATUS_ERR_NOT_INIT;
     }
 
     GPIO_TypeDef *port = get_port(gpio);
@@ -128,13 +128,13 @@ int gpio_init(const gpio_pin_t *gpio, const gpio_config_t *config)
     port->PUPDR &= ~(0x3U << (gpio->pin * 2U));
     port->PUPDR |= ((uint32_t)config->pull << (gpio->pin * 2U));
 
-    return 0;
+    return STATUS_OK;
 }
 
-int gpio_deinit(const gpio_pin_t *gpio)
+status_t gpio_deinit(const gpio_pin_t *gpio)
 {
     if (!is_valid_pin(gpio)) {
-        return -1;
+        return STATUS_ERR_INVALID_PIN;
     }
 
     GPIO_TypeDef *port = get_port(gpio);
@@ -150,73 +150,73 @@ int gpio_deinit(const gpio_pin_t *gpio)
         port->AFR[1] &= ~(0xFUL << ((gpio->pin - 8U) * 4U));
     }
 
-    return 0;
+    return STATUS_OK;
 }
 
-int gpio_set(const gpio_pin_t *gpio)
+status_t gpio_set(const gpio_pin_t *gpio)
 {
     if (!is_valid_pin(gpio)) {
-        return -1;
+        return STATUS_ERR_INVALID_PIN;
     }
 
     if (!is_pin_an_output(gpio)) {
-        return -1;
+        return STATUS_ERR_INVALID_STATE;
     }
 
     /* Atomic set */
     get_port(gpio)->BSRR = (1U << gpio->pin);
 
-    return 0;
+    return STATUS_OK;
 }
 
-int gpio_reset(const gpio_pin_t *gpio)
+status_t gpio_reset(const gpio_pin_t *gpio)
 {
     if (!is_valid_pin(gpio)) {
-        return -1;
+        return STATUS_ERR_INVALID_PIN;
     }
 
     if (!is_pin_an_output(gpio)) {
-        return -1;
+        return STATUS_ERR_INVALID_STATE;
     }
 
     /* Atomic reset */
     get_port(gpio)->BRR = (1U << gpio->pin);
 
-    return 0;
+    return STATUS_OK;
 }
 
-int gpio_set_state(const gpio_pin_t *gpio, gpio_state_t state)
+status_t gpio_set_state(const gpio_pin_t *gpio, gpio_state_t state)
 {
     return state ? gpio_set(gpio) : gpio_reset(gpio);
 }
 
-int gpio_toggle(const gpio_pin_t *gpio)
+status_t gpio_toggle(const gpio_pin_t *gpio)
 {
     if (!is_valid_pin(gpio)) {
-        return -1;
+        return STATUS_ERR_INVALID_PIN;
     }
 
     if (!is_pin_an_output(gpio)) {
-        return -1;
+        return STATUS_ERR_INVALID_STATE;
     }
 
     get_port(gpio)->ODR ^= (0x1U << gpio->pin);
 
-    return 0;
+    return STATUS_OK;
 }
 
-int gpio_read(const gpio_pin_t *gpio, bool *state)
+status_t gpio_read(const gpio_pin_t *gpio, bool *state)
 {
     if (state == NULL) {
-        return -1;
+        return STATUS_ERR_INVALID_ARG;
     }
 
     if (!is_valid_pin(gpio)) {
-        return -1;
+        return STATUS_ERR_INVALID_PIN;
     }
 
     if (!is_pin_an_input(gpio)) {
-        return -1;
+        return STATUS_ERR_INVALID_STATE;
     }
 
     if ((get_port(gpio)->IDR & (0x1U << gpio->pin)) != 0U) {
@@ -225,21 +225,21 @@ int gpio_read(const gpio_pin_t *gpio, bool *state)
         *state = false;
     }
 
-    return 0;
+    return STATUS_OK;
 }
 
-int gpio_init_interrupt(const gpio_pin_t *gpio, const gpio_irq_config_t *config)
+status_t gpio_init_interrupt(const gpio_pin_t *gpio, const gpio_irq_config_t *config)
 {
     if (config == NULL) {
-        return -1;
+        return STATUS_ERR_INVALID_ARG;
     }
 
     if (!is_valid_pin(gpio)) {
-        return -1;
+        return STATUS_ERR_INVALID_PIN;
     }
 
     if (config->priority > FMAC_IRQn) {
-        return -1;
+        return STATUS_ERR_INVALID_ARG;
     }
 
     uint8_t exticr_idx   = gpio->pin / 4U;
@@ -247,7 +247,7 @@ int gpio_init_interrupt(const gpio_pin_t *gpio, const gpio_irq_config_t *config)
     uint32_t port_idx    = (uint32_t)gpio->port;
 
     if (rcc_periph_enable(RCC_PERIPH_SYSCFG) != 0) {
-        return -1;
+        return STATUS_ERR_NOT_INIT;
     }
 
     SYSCFG->EXTICR[exticr_idx] &= ~(0xFU << exticr_shift);
@@ -275,13 +275,13 @@ int gpio_init_interrupt(const gpio_pin_t *gpio, const gpio_irq_config_t *config)
     NVIC_SetPriority(interrupt_number, config->priority);
     NVIC_EnableIRQ(interrupt_number);
 
-    return 0;
+    return STATUS_OK;
 }
 
-int gpio_deinit_interrupt(const gpio_pin_t *gpio)
+status_t gpio_deinit_interrupt(const gpio_pin_t *gpio)
 {
     if (!is_valid_pin(gpio)) {
-        return -1;
+        return STATUS_ERR_INVALID_PIN;
     }
 
     IRQn_Type interrupt_number = get_exti_irqn(gpio->pin);
@@ -298,13 +298,13 @@ int gpio_deinit_interrupt(const gpio_pin_t *gpio)
 
     irq_callbacks[gpio->pin] = NULL;
 
-    return 0;
+    return STATUS_OK;
 }
 
-int gpio_set_af(const gpio_pin_t *gpio, gpio_af_t af)
+status_t gpio_set_af(const gpio_pin_t *gpio, gpio_af_t af)
 {
     if (!is_valid_pin(gpio)) {
-        return -1;
+        return STATUS_ERR_INVALID_PIN;
     }
 
     GPIO_TypeDef *port = get_port(gpio);
@@ -319,7 +319,7 @@ int gpio_set_af(const gpio_pin_t *gpio, gpio_af_t af)
         port->AFR[1] |= ((uint32_t)af << ((gpio->pin - 8U) * 4U));
     }
 
-    return 0;
+    return STATUS_OK;
 }
 
 /* Check if an interrupt is pending,

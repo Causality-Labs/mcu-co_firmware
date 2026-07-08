@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include "stm32g474xx.h"
+#include "status.h"
 
 #define GPIOA_RESERVED_PINS ((1U << 13U) | (1U << 14U) | (1U << 15U))
 #define GPIOB_RESERVED_PINS ((1U << 3U) | (1U << 4U))
@@ -110,9 +111,11 @@ typedef struct {
  *
  * @param gpio   Pointer to pin handle (port + pin number)
  * @param config Pointer to pin configuration
- * @return 0 on success, -1 on invalid pin
+ * @return STATUS_OK on success, STATUS_ERR_INVALID_ARG if @p config is NULL,
+ *         STATUS_ERR_INVALID_PIN for an invalid or reserved pin,
+ *         STATUS_ERR_NOT_INIT if the port clock could not be enabled.
  */
-int gpio_init(const gpio_pin_t *gpio, const gpio_config_t *config);
+status_t gpio_init(const gpio_pin_t *gpio, const gpio_config_t *config);
 
 /**
  * @brief Reset a GPIO pin to its default state.
@@ -121,9 +124,9 @@ int gpio_init(const gpio_pin_t *gpio, const gpio_config_t *config);
  * Does not disable the port clock as other pins may still be active.
  *
  * @param gpio Pointer to pin handle (port + pin number)
- * @return 0 on success, -1 on invalid pin
+ * @return STATUS_OK on success, STATUS_ERR_INVALID_PIN on an invalid pin.
  */
-int gpio_deinit(const gpio_pin_t *gpio);
+status_t gpio_deinit(const gpio_pin_t *gpio);
 
 /**
  * @brief Drive a GPIO output pin high.
@@ -131,9 +134,10 @@ int gpio_deinit(const gpio_pin_t *gpio);
  * Uses the BSRR register for atomic set.
  *
  * @param gpio Pointer to pin handle (port + pin number)
- * @return 0 on success, -1 if the pin is invalid or not configured as output
+ * @return STATUS_OK on success, STATUS_ERR_INVALID_PIN on an invalid pin,
+ *         STATUS_ERR_INVALID_STATE if the pin is not configured as an output.
  */
-int gpio_set(const gpio_pin_t *gpio);
+status_t gpio_set(const gpio_pin_t *gpio);
 
 /**
  * @brief Drive a GPIO output pin low.
@@ -141,20 +145,21 @@ int gpio_set(const gpio_pin_t *gpio);
  * Uses the BRR register for atomic reset.
  *
  * @param gpio Pointer to pin handle (port + pin number)
- * @return 0 on success, -1 if the pin is invalid or not configured as output
+ * @return STATUS_OK on success, STATUS_ERR_INVALID_PIN on an invalid pin,
+ *         STATUS_ERR_INVALID_STATE if the pin is not configured as an output.
  */
-int gpio_reset(const gpio_pin_t *gpio);
+status_t gpio_reset(const gpio_pin_t *gpio);
 
 /**
  * @brief Set a GPIO output pin to an explicit logic level.
  *
- * Calls gpio_set() when @p state is true, gpio_reset() when false.
+ * Calls gpio_set() when @p state is GPIO_HIGH, gpio_reset() when GPIO_LOW.
  *
  * @param gpio  Pointer to pin handle (port + pin number)
- * @param state Desired logic level (true = high, false = low)
- * @return 0 on success, -1 if the pin is invalid or not configured as output
+ * @param state Desired logic level (GPIO_HIGH or GPIO_LOW)
+ * @return STATUS_OK on success, or the error returned by gpio_set()/gpio_reset().
  */
-int gpio_set_state(const gpio_pin_t *gpio, gpio_state_t state);
+status_t gpio_set_state(const gpio_pin_t *gpio, gpio_state_t state);
 
 /**
  * @brief Toggle a GPIO output pin.
@@ -162,9 +167,10 @@ int gpio_set_state(const gpio_pin_t *gpio, gpio_state_t state);
  * Inverts the current state of the ODR bit for the given pin.
  *
  * @param gpio Pointer to pin handle (port + pin number)
- * @return 0 on success, -1 if the pin is invalid or not configured as output
+ * @return STATUS_OK on success, STATUS_ERR_INVALID_PIN on an invalid pin,
+ *         STATUS_ERR_INVALID_STATE if the pin is not configured as an output.
  */
-int gpio_toggle(const gpio_pin_t *gpio);
+status_t gpio_toggle(const gpio_pin_t *gpio);
 
 /**
  * @brief Read the logic level of a GPIO input pin.
@@ -173,9 +179,11 @@ int gpio_toggle(const gpio_pin_t *gpio);
  *
  * @param gpio  Pointer to pin handle (port + pin number)
  * @param state Output parameter set to true if the pin is high, false if low
- * @return 0 on success, -1 if the pin is invalid or not configured as input
+ * @return STATUS_OK on success, STATUS_ERR_INVALID_ARG if @p state is NULL,
+ *         STATUS_ERR_INVALID_PIN on an invalid pin,
+ *         STATUS_ERR_INVALID_STATE if the pin is not configured as an input.
  */
-int gpio_read(const gpio_pin_t *gpio, bool *state);
+status_t gpio_read(const gpio_pin_t *gpio, bool *state);
 
 /**
  * @brief Configure a GPIO pin as an external interrupt.
@@ -185,9 +193,11 @@ int gpio_read(const gpio_pin_t *gpio, bool *state);
  *
  * @param gpio   Pointer to pin handle (port + pin number)
  * @param config Pointer to interrupt configuration (trigger and callback)
- * @return 0 on success, -1 on invalid pin
+ * @return STATUS_OK on success, STATUS_ERR_INVALID_ARG if @p config is NULL or
+ *         the priority is out of range, STATUS_ERR_INVALID_PIN on an invalid
+ *         pin, STATUS_ERR_NOT_INIT if the SYSCFG clock could not be enabled.
  */
-int gpio_init_interrupt(const gpio_pin_t *gpio, const gpio_irq_config_t *config);
+status_t gpio_init_interrupt(const gpio_pin_t *gpio, const gpio_irq_config_t *config);
 
 /**
  * @brief Deconfigure a GPIO external interrupt.
@@ -196,9 +206,9 @@ int gpio_init_interrupt(const gpio_pin_t *gpio, const gpio_irq_config_t *config)
  * configuration, clears the EXTICR port mapping, and removes the callback.
  *
  * @param gpio Pointer to pin handle (port + pin number)
- * @return 0 on success, -1 on invalid pin
+ * @return STATUS_OK on success, STATUS_ERR_INVALID_PIN on an invalid pin.
  */
-int gpio_deinit_interrupt(const gpio_pin_t *gpio);
+status_t gpio_deinit_interrupt(const gpio_pin_t *gpio);
 
 /** @brief Returns true if the pin is configured as alternate function. */
 bool is_pin_an_af(const gpio_pin_t *gpio);
@@ -217,8 +227,8 @@ bool is_pin_an_input(const gpio_pin_t *gpio);
  *
  * @param gpio Pointer to pin handle (port + pin number)
  * @param af   Alternate function selection (AF0–AF15)
- * @return 0 on success, -1 on invalid pin
+ * @return STATUS_OK on success, STATUS_ERR_INVALID_PIN on an invalid pin.
  */
-int gpio_set_af(const gpio_pin_t *gpio, gpio_af_t af);
+status_t gpio_set_af(const gpio_pin_t *gpio, gpio_af_t af);
 
 #endif /* GPIO_H */

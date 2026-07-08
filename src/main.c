@@ -3,6 +3,8 @@
 #include "uart.h"
 #include "rcc.h"
 #include "logger.h"
+#include "systick.h"
+#include "status.h"
 
 #define MODULE_NAME "MAIN"
 
@@ -11,22 +13,21 @@ const gpio_pin_t button = {.port = GPIO_PORT_C, .pin = (uint8_t)13U};
 
 static volatile uint8_t button_event = 0U;
 
-void delay(uint64_t ticks);
 void button_ISR(void);
 
 int main(void)
 {
-    int ret = 0;
-
-    ret = rcc_init(RCC_SYSCLK_HSI_170MHZ);
-    if (ret != 0) {
+    if (rcc_init(RCC_SYSCLK_HSI_170MHZ) != STATUS_OK) {
         for (;;) {
         }
     }
 
-    ret = logger_init();
+    if (systick_init() != STATUS_OK) {
+        for (;;) {
+        }
+    }
 
-    if (ret != 0) {
+    if (logger_init() != 0) {
         for (;;) {
         }
     }
@@ -48,16 +49,14 @@ int main(void)
         .pull  = GPIO_PULL_NONE,
     };
 
-    ret = gpio_init(&led, &led_config);
-    if (ret != 0) {
+    if (gpio_init(&led, &led_config) != STATUS_OK) {
         LOG_ERROR(MODULE_NAME, "LED gpio_init failed");
         for (;;) {
         }
     }
     LOG_DEBUG(MODULE_NAME, "LED configured");
 
-    ret = gpio_init(&button, &button_config);
-    if (ret != 0) {
+    if (gpio_init(&button, &button_config) != STATUS_OK) {
         LOG_ERROR(MODULE_NAME, "button gpio_init failed");
         for (;;) {
         }
@@ -70,8 +69,7 @@ int main(void)
         .priority = 5,
     };
 
-    ret = gpio_init_interrupt(&button, &irq_cfg);
-    if (ret != 0) {
+    if (gpio_init_interrupt(&button, &irq_cfg) != STATUS_OK) {
         LOG_ERROR(MODULE_NAME, "button IRQ init failed");
         for (;;) {
         }
@@ -85,17 +83,12 @@ int main(void)
             button_event = 0U;
             LOG_INFO(MODULE_NAME, "button pressed");
         }
+
         logger_flush();
-        delay(10000U);
+        delay_ms(500U);
     }
 
     return 0;
-}
-
-void delay(uint64_t ticks)
-{
-    for (volatile uint64_t i = 0U; i < ticks; i++) {
-    }
 }
 
 void button_ISR(void)
