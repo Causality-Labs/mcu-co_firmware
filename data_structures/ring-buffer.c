@@ -2,18 +2,19 @@
 #include <stddef.h>
 #include "ring-buffer.h"
 
-int ring_buffer_init(ring_buffer_t *rb, void *buffer, uint16_t capacity, size_t element_size)
+
+status_t ring_buffer_init(ring_buffer_t *rb, void *buffer, uint16_t capacity, size_t element_size)
 {
     if (rb == NULL || buffer == NULL) {
-        return -1;
+        return STATUS_ERR_INVALID_ARG;
     }
 
     if (element_size == 0U) {
-        return -1;
+        return STATUS_ERR_INVALID_ARG;
     }
 
     if ((capacity == 0U) || ((capacity & (capacity - 1U)) != 0U)) {
-        return -1;
+        return STATUS_ERR_INVALID_ARG;
     }
 
     rb->buffer       = buffer;
@@ -23,7 +24,7 @@ int ring_buffer_init(ring_buffer_t *rb, void *buffer, uint16_t capacity, size_t 
     rb->tail         = 0U;
     rb->mask         = (uint16_t)(capacity - 1U);
 
-    return 0;
+    return STATUS_OK;
 }
 
 bool ring_buffer_is_empty(const ring_buffer_t *rb)
@@ -44,48 +45,44 @@ bool ring_buffer_is_full(const ring_buffer_t *rb)
     return ((rb->head + 1U) & rb->mask) == rb->tail;
 }
 
-int ring_buffer_write(ring_buffer_t *rb, const void *element)
+status_t ring_buffer_write(ring_buffer_t *rb, const void *element)
 {
     if (rb == NULL || element == NULL) {
-        return -1;
-    }
-
-    if (ring_buffer_is_full(rb)) {
-        return -1;
+        return STATUS_ERR_INVALID_ARG;
     }
 
     uint8_t *dst = (uint8_t *)rb->buffer + (rb->head * rb->element_size);
     (void)memcpy(dst, element, rb->element_size);
     rb->head = (uint16_t)((rb->head + 1U) & rb->mask);
 
-    return 0;
+    return STATUS_OK;
 }
 
-int ring_buffer_read(ring_buffer_t *rb, void *element)
+status_t ring_buffer_read(ring_buffer_t *rb, void *element)
 {
     if (rb == NULL || element == NULL) {
-        return -1;
+        return STATUS_ERR_INVALID_ARG;
     }
 
     if (ring_buffer_is_empty(rb)) {
-        return -1;
+        return STATUS_ERR_EMPTY;
     }
 
     const uint8_t *src = (const uint8_t *)rb->buffer + (rb->tail * rb->element_size);
     (void)memcpy(element, src, rb->element_size);
     rb->tail = (uint16_t)((rb->tail + 1U) & rb->mask);
 
-    return 0;
+    return STATUS_OK;
 }
 
-int ring_buffer_flush(ring_buffer_t *rb)
+status_t ring_buffer_flush(ring_buffer_t *rb)
 {
     if (rb == NULL) {
-        return -1;
+        return STATUS_ERR_INVALID_ARG;
     }
 
     rb->head = 0U;
     rb->tail = 0U;
 
-    return 0;
+    return STATUS_OK;
 }

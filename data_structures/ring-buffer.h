@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include "status.h"
 
 /**
  * @brief Generic fixed-capacity ring (circular) buffer.
@@ -38,10 +39,10 @@ typedef struct {
  * @param buffer       Backing storage for @p capacity elements
  * @param capacity     Number of slots; must be a non-zero power of two
  * @param element_size Size in bytes of a single element; must be non-zero
- * @return 0 on success, -1 on a NULL pointer, zero @p element_size, or a
- *         @p capacity that is zero or not a power of two.
+ * @return STATUS_OK on success, STATUS_ERR_INVALID_ARG on a NULL pointer, zero
+ *         @p element_size, or a @p capacity that is zero or not a power of two.
  */
-int ring_buffer_init(ring_buffer_t *rb, void *buffer, uint16_t capacity, size_t element_size);
+status_t ring_buffer_init(ring_buffer_t *rb, void *buffer, uint16_t capacity, size_t element_size);
 
 /**
  * @brief Copy one element into the buffer.
@@ -52,9 +53,10 @@ int ring_buffer_init(ring_buffer_t *rb, void *buffer, uint16_t capacity, size_t 
  *
  * @param rb      Ring buffer to write to
  * @param element Pointer to the element to copy in
- * @return 0 on success, -1 on a NULL pointer or if the buffer is full.
+ * @return STATUS_OK on success, STATUS_ERR_INVALID_ARG on a NULL pointer,
+ *         STATUS_ERR_FULL if the buffer is full.
  */
-int ring_buffer_write(ring_buffer_t *rb, const void *element);
+status_t ring_buffer_write(ring_buffer_t *rb, const void *element);
 
 /**
  * @brief Copy one element out of the buffer.
@@ -64,9 +66,10 @@ int ring_buffer_write(ring_buffer_t *rb, const void *element);
  *
  * @param rb      Ring buffer to read from
  * @param element Destination for the element (at least @p element_size bytes)
- * @return 0 on success, -1 on a NULL pointer or if the buffer is empty.
+ * @return STATUS_OK on success, STATUS_ERR_INVALID_ARG on a NULL pointer,
+ *         STATUS_ERR_EMPTY if the buffer is empty.
  */
-int ring_buffer_read(ring_buffer_t *rb, void *element);
+status_t ring_buffer_read(ring_buffer_t *rb, void *element);
 
 /**
  * @brief Discard all buffered elements.
@@ -74,9 +77,9 @@ int ring_buffer_read(ring_buffer_t *rb, void *element);
  * Resets the head and tail to empty. The backing storage is left untouched.
  *
  * @param rb Ring buffer to flush
- * @return 0 on success, -1 if @p rb is NULL.
+ * @return STATUS_OK on success, STATUS_ERR_INVALID_ARG if @p rb is NULL.
  */
-int ring_buffer_flush(ring_buffer_t *rb);
+status_t ring_buffer_flush(ring_buffer_t *rb);
 
 /**
  * @brief Test whether the buffer holds no elements.

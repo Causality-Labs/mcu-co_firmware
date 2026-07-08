@@ -19,6 +19,7 @@ typedef enum {
     STATUS_ERR_TIMEOUT,       /**< Hardware did not respond within the timeout. */
     STATUS_ERR_UNSUPPORTED,   /**< Valid request the driver cannot satisfy.     */
     STATUS_ERR_EMPTY,         /**< No data available (e.g. RX buffer empty).    */
+    STATUS_ERR_FULL,          /**< No space available (e.g. TX/ring buffer full).*/
 } status_t;
 
 /**

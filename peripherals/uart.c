@@ -250,7 +250,7 @@ status_t uart_init(uart_instance_t instance, const uart_config_t *config,
         }
 
         if (ring_buffer_init(&rx_buffers[instance], rx_buffer->buffer, rx_buffer->size,
-                             sizeof(uint8_t)) != 0) {
+                             sizeof(uint8_t)) != STATUS_OK) {
             return STATUS_ERR_INVALID_ARG;
         }
 
@@ -339,7 +339,8 @@ static inline status_t uart_write_byte_hw(USART_TypeDef *uart_channel, uint8_t d
 
 static inline status_t uart_read_byte_hw(uart_instance_t instance, uint8_t *data)
 {
-    return (ring_buffer_read(&rx_buffers[instance], data) == 0) ? STATUS_OK : STATUS_ERR_EMPTY;
+    return (ring_buffer_read(&rx_buffers[instance], data) == STATUS_OK) ? STATUS_OK
+                                                                        : STATUS_ERR_EMPTY;
 }
 
 status_t uart_write_byte(uart_instance_t instance, const uint8_t data)

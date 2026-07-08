@@ -21,6 +21,8 @@ const char *status_to_str(status_t status)
         return "UNSUPPORTED";
     case STATUS_ERR_EMPTY:
         return "EMPTY";
+    case STATUS_ERR_FULL:
+        return "FULL";
     default:
         return "?";
     }
