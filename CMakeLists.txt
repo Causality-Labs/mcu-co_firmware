@@ -90,13 +90,15 @@ endif()
 
 add_executable(${PROJECT_NAME}
   src/main.c
-  src/log/logger.c
+  src/frame_parser.c
+  src/logger.c
   peripherals/uart.c
   peripherals/gpio.c
   peripherals/rcc.c
   peripherals/systick.c
   data_structures/ring-buffer.c
   common/status.c
+  common/crc16.c
   $<TARGET_OBJECTS:vendor>
 )
 
