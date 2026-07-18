@@ -9,7 +9,8 @@
 /**
  * @brief Unified status / error code returned across the firmware.
  */
-typedef enum {
+typedef enum
+{
     STATUS_OK = 0,            /**< Operation completed successfully.            */
     STATUS_ERR_INVALID_ARG,   /**< NULL pointer or out-of-range enum argument.  */
     STATUS_ERR_INVALID_PIN,   /**< Pin number out of range or a reserved pin.   */

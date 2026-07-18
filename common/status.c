@@ -2,7 +2,8 @@
 
 const char *status_to_str(status_t status)
 {
-    switch (status) {
+    switch (status)
+    {
     case STATUS_OK:
         return "OK";
     case STATUS_ERR_INVALID_ARG:

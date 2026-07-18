@@ -2,13 +2,13 @@ BasedOnStyle: LLVM
 IndentWidth: 4
 TabWidth: 4
 UseTab: Never
-ColumnLimit: 100
+ColumnLimit: 110
 
 # C pointer convention: uint8_t *ptr not uint8_t* ptr
 PointerAlignment: Right
 
-# Keep braces on same line (K&R style — dominant in embedded C)
-BreakBeforeBraces: Linux
+# Brace always on its own new line, including if/for/while/switch (Allman style)
+BreakBeforeBraces: Allman
 
 # Align consecutive macros/assignments (register tables, init blocks)
 AlignConsecutiveMacros:      Consecutive

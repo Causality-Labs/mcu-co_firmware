@@ -4,18 +4,20 @@
 #include <stdint.h>
 
 #define MAX_PAYLOAD 32
-#define OPCODE_IDX 0
-#define LENGTH_IDX 1
+#define OPCODE_IDX  0
+#define LENGTH_IDX  1
 #define PAYLOAD_IDX 2
 
-typedef enum {
+typedef enum
+{
     FRAME_READY,
     FRAME_IN_PROGRESS,
     FRAME_PENDING,
     FRAME_ERROR
 } frame_results_t;
 
-typedef enum {
+typedef enum
+{
     SOF,
     OPCODE,
     LENGTH,
@@ -24,7 +26,8 @@ typedef enum {
     CRC_HIGH
 } frame_state_t;
 
-typedef struct {
+typedef struct
+{
     frame_state_t state;
     uint8_t opcode;
     uint8_t length;
