@@ -8,7 +8,8 @@
 
 #define LOG_QUEUE_DEPTH 16U
 
-typedef struct {
+typedef struct
+{
     log_level_t level;
     const char *module;
     const char *message;
@@ -23,7 +24,8 @@ static bool logger_initialized = false;
 
 static const char *level_str(log_level_t level)
 {
-    switch (level) {
+    switch (level)
+    {
     case LOG_LEVEL_ERROR:
         return "ERROR";
     case LOG_LEVEL_WARN:
@@ -39,7 +41,8 @@ static const char *level_str(log_level_t level)
 
 static void emit(const char *s)
 {
-    while (*s != '\0') {
+    while (*s != '\0')
+    {
         (void)uart_write_byte(uart_logger, (uint8_t)*s);
         s++;
     }
@@ -55,7 +58,8 @@ static int init_uart_logger_hw(void)
         .mode       = UART_MODE_TX,
     };
 
-    if (uart_init(uart_logger, &config, NULL) != 0) {
+    if (uart_init(uart_logger, &config, NULL) != 0)
+    {
         return -1;
     }
 
@@ -64,16 +68,18 @@ static int init_uart_logger_hw(void)
 
 int logger_init(void)
 {
-    if (logger_initialized) {
+    if (logger_initialized)
+    {
         return -1;
     }
 
-    if (ring_buffer_init(&log_queue, log_backing, LOG_QUEUE_DEPTH, sizeof(log_entry_t)) !=
-        STATUS_OK) {
+    if (ring_buffer_init(&log_queue, log_backing, LOG_QUEUE_DEPTH, sizeof(log_entry_t)) != STATUS_OK)
+    {
         return -1;
     }
 
-    if (init_uart_logger_hw() != 0) {
+    if (init_uart_logger_hw() != 0)
+    {
         return -1;
     }
 
@@ -84,11 +90,13 @@ int logger_init(void)
 
 void logger_log(log_level_t level, const char *module, const char *message)
 {
-    if (module == NULL || message == NULL) {
+    if (module == NULL || message == NULL)
+    {
         return;
     }
 
-    if (!logger_initialized) {
+    if (!logger_initialized)
+    {
         return;
     }
 
@@ -102,12 +110,14 @@ void logger_log(log_level_t level, const char *module, const char *message)
 
 void logger_flush(void)
 {
-    if (!logger_initialized) {
+    if (!logger_initialized)
+    {
         return;
     }
 
     log_entry_t entry;
-    while (ring_buffer_read(&log_queue, &entry) == STATUS_OK) {
+    while (ring_buffer_read(&log_queue, &entry) == STATUS_OK)
+    {
         emit("[");
         emit(level_str(entry.level));
         emit("] ");

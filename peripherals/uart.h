@@ -10,7 +10,8 @@
 #define NUM_OF_UART_PORTS 6
 
 /** @brief Supported baud rates. */
-typedef enum {
+typedef enum
+{
     UART_BAUD_9600   = 9600U,
     UART_BAUD_19200  = 19200U,
     UART_BAUD_38400  = 38400U,
@@ -19,34 +20,39 @@ typedef enum {
 } uart_baudrate_t;
 
 /** @brief Parity mode selection. */
-typedef enum {
+typedef enum
+{
     UART_PARITY_NONE = 0U,
     UART_PARITY_EVEN = 1U,
     UART_PARITY_ODD  = 2U,
 } uart_parity_t;
 
 /** @brief Data frame width selection. */
-typedef enum {
+typedef enum
+{
     UART_DATA_8BIT = 0U,
     UART_DATA_9BIT = 1U,
     UART_DATA_7BIT = 2U,
 } uart_data_width_t;
 
 /** @brief Number of stop bits. */
-typedef enum {
+typedef enum
+{
     UART_STOP_1BIT = 0U,
     UART_STOP_2BIT = 1U,
 } uart_stop_bits_t;
 
 /** @brief TX, RX, or bidirectional mode. */
-typedef enum {
+typedef enum
+{
     UART_MODE_TX    = 0U,
     UART_MODE_RX    = 1U,
     UART_MODE_TX_RX = 2U,
 } uart_mode_t;
 
 /** @brief UART peripheral instance identifiers. */
-typedef enum {
+typedef enum
+{
     UART_INSTANCE_USART1  = 0U,
     UART_INSTANCE_USART2  = 1U,
     UART_INSTANCE_USART3  = 2U,
@@ -56,7 +62,8 @@ typedef enum {
 } uart_instance_t;
 
 /** @brief UART peripheral configuration parameters. */
-typedef struct {
+typedef struct
+{
     uart_baudrate_t baudrate;
     uart_parity_t parity;
     uart_data_width_t data_width;
@@ -70,7 +77,8 @@ typedef struct {
  * @p buffer must remain valid for the lifetime of the UART instance.
  * @p size must be a power of 2.
  */
-typedef struct {
+typedef struct
+{
     uint8_t *buffer;
     uint16_t size;
 } uart_rx_buffer_t;
@@ -90,8 +98,7 @@ typedef struct {
  *         STATUS_ERR_NOT_INIT if the clock/GPIO could not be brought up,
  *         STATUS_ERR_TIMEOUT if the peripheral did not become ready.
  */
-status_t uart_init(uart_instance_t instance, const uart_config_t *config,
-                   const uart_rx_buffer_t *rx_buffer);
+status_t uart_init(uart_instance_t instance, const uart_config_t *config, const uart_rx_buffer_t *rx_buffer);
 
 /**
  * @brief Deinitialise a UART peripheral.
@@ -164,7 +171,6 @@ status_t uart_read_byte(uart_instance_t instance, uint8_t *data);
  *         STATUS_ERR_NOT_INIT if not initialised, STATUS_ERR_INVALID_STATE if
  *         the instance is not in an RX-capable mode.
  */
-status_t uart_read_buffer(uart_instance_t instance, uint8_t *data, uint16_t length,
-                          uint16_t *bytes_read);
+status_t uart_read_buffer(uart_instance_t instance, uint8_t *data, uint16_t length, uint16_t *bytes_read);
 
 #endif /* UART_H */

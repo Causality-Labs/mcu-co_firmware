@@ -7,7 +7,8 @@
 /**
  * @brief Selectable system clock (SYSCLK) targets.
  */
-typedef enum {
+typedef enum
+{
     RCC_SYSCLK_HSI_170MHZ = 0U, /**< 170 MHz from HSI16 via PLL (Range 1 boost) */
 } rcc_sysclk_t;
 
@@ -17,7 +18,8 @@ typedef enum {
  * This is the only handle other drivers use to enable or disable a clock;
  * the mapping to RCC enable registers and bits lives entirely in rcc.c.
  */
-typedef enum {
+typedef enum
+{
     RCC_PERIPH_GPIOA = 0U,
     RCC_PERIPH_GPIOB,
     RCC_PERIPH_GPIOC,
@@ -40,7 +42,8 @@ typedef enum {
  *
  * Values match the 2-bit USARTxSEL/LPUART1SEL field encoding.
  */
-typedef enum {
+typedef enum
+{
     RCC_CLK_SRC_PCLK   = 0U, /**< APB peripheral clock */
     RCC_CLK_SRC_SYSCLK = 1U, /**< System clock */
     RCC_CLK_SRC_HSI16  = 2U, /**< 16 MHz internal oscillator */

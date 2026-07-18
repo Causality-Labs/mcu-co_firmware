@@ -33,7 +33,8 @@
 static uint32_t rcc_sysclk_hz = 0U;
 
 /* Maps each peripheral to its RCC enable register and bit. */
-typedef struct {
+typedef struct
+{
     volatile uint32_t *enr;
     uint32_t bit;
 } rcc_periph_clk_t;
@@ -66,8 +67,10 @@ static const rcc_periph_clk_t rcc_periph_clk[RCC_PERIPH_COUNT] = {
 static int rcc_wait_value(const volatile uint32_t *reg, uint32_t mask, uint32_t expected)
 {
     uint32_t retries = RCC_READY_TIMEOUT;
-    while ((*reg & mask) != expected) {
-        if (retries == 0U) {
+    while ((*reg & mask) != expected)
+    {
+        if (retries == 0U)
+        {
             return -1;
         }
         retries--;
@@ -92,7 +95,8 @@ static int rcc_enable_boost(void)
     cr1 |= PWR_CR1_VOS_0; /* 0b01 = Range 1 */
     PWR->CR1 = cr1;
 
-    if (rcc_wait_value(&PWR->SR2, PWR_SR2_VOSF, 0U) != 0) {
+    if (rcc_wait_value(&PWR->SR2, PWR_SR2_VOSF, 0U) != 0)
+    {
         return -1;
     }
 
@@ -116,7 +120,8 @@ static int rcc_configure_flash(void)
     acr |= RCC_FLASH_LATENCY_170MHZ | FLASH_ACR_PRFTEN | FLASH_ACR_ICEN | FLASH_ACR_DCEN;
     FLASH->ACR = acr;
 
-    if ((FLASH->ACR & FLASH_ACR_LATENCY) != RCC_FLASH_LATENCY_170MHZ) {
+    if ((FLASH->ACR & FLASH_ACR_LATENCY) != RCC_FLASH_LATENCY_170MHZ)
+    {
         return -1;
     }
 
@@ -134,12 +139,14 @@ static int rcc_configure_flash(void)
 static int rcc_start_pll(void)
 {
     RCC->CR |= RCC_CR_HSION;
-    if (rcc_wait_value(&RCC->CR, RCC_CR_HSIRDY, RCC_CR_HSIRDY) != 0) {
+    if (rcc_wait_value(&RCC->CR, RCC_CR_HSIRDY, RCC_CR_HSIRDY) != 0)
+    {
         return -1;
     }
 
     RCC->CR &= ~RCC_CR_PLLON;
-    if (rcc_wait_value(&RCC->CR, RCC_CR_PLLRDY, 0U) != 0) {
+    if (rcc_wait_value(&RCC->CR, RCC_CR_PLLRDY, 0U) != 0)
+    {
         return -1;
     }
 
@@ -149,7 +156,8 @@ static int rcc_start_pll(void)
                    RCC_PLLCFGR_PLLREN; /* enable the PLLR (SYSCLK) output */
 
     RCC->CR |= RCC_CR_PLLON;
-    if (rcc_wait_value(&RCC->CR, RCC_CR_PLLRDY, RCC_CR_PLLRDY) != 0) {
+    if (rcc_wait_value(&RCC->CR, RCC_CR_PLLRDY, RCC_CR_PLLRDY) != 0)
+    {
         return -1;
     }
 
@@ -175,11 +183,13 @@ static int rcc_switch_to_pll(void)
     cfgr &= ~RCC_CFGR_SW;
     cfgr |= RCC_CFGR_SW_PLL;
     RCC->CFGR = cfgr;
-    if (rcc_wait_value(&RCC->CFGR, RCC_CFGR_SWS, RCC_CFGR_SWS_PLL) != 0) {
+    if (rcc_wait_value(&RCC->CFGR, RCC_CFGR_SWS, RCC_CFGR_SWS_PLL) != 0)
+    {
         return -1;
     }
 
-    for (volatile uint32_t i = 0U; i < RCC_BOOST_SETTLE_LOOPS; i++) {
+    for (volatile uint32_t i = 0U; i < RCC_BOOST_SETTLE_LOOPS; i++)
+    {
     }
 
     RCC->CFGR = (RCC->CFGR & ~RCC_CFGR_HPRE) | RCC_CFGR_HPRE_DIV1; /* restore full speed */
@@ -189,23 +199,28 @@ static int rcc_switch_to_pll(void)
 
 status_t rcc_init(rcc_sysclk_t target)
 {
-    if (target != RCC_SYSCLK_HSI_170MHZ) {
+    if (target != RCC_SYSCLK_HSI_170MHZ)
+    {
         return STATUS_ERR_INVALID_ARG;
     }
 
-    if (rcc_enable_boost() != 0) {
+    if (rcc_enable_boost() != 0)
+    {
         return STATUS_ERR_TIMEOUT;
     }
 
-    if (rcc_configure_flash() != 0) {
+    if (rcc_configure_flash() != 0)
+    {
         return STATUS_ERR_TIMEOUT;
     }
 
-    if (rcc_start_pll() != 0) {
+    if (rcc_start_pll() != 0)
+    {
         return STATUS_ERR_TIMEOUT;
     }
 
-    if (rcc_switch_to_pll() != 0) {
+    if (rcc_switch_to_pll() != 0)
+    {
         return STATUS_ERR_TIMEOUT;
     }
 
@@ -222,7 +237,8 @@ uint32_t rcc_get_sysclk_hz(void)
 
 status_t rcc_periph_enable(rcc_periph_t periph)
 {
-    if (periph >= RCC_PERIPH_COUNT) {
+    if (periph >= RCC_PERIPH_COUNT)
+    {
         return STATUS_ERR_INVALID_ARG;
     }
 
@@ -234,7 +250,8 @@ status_t rcc_periph_enable(rcc_periph_t periph)
 
 status_t rcc_periph_disable(rcc_periph_t periph)
 {
-    if (periph >= RCC_PERIPH_COUNT) {
+    if (periph >= RCC_PERIPH_COUNT)
+    {
         return STATUS_ERR_INVALID_ARG;
     }
 
@@ -247,7 +264,8 @@ status_t rcc_periph_set_clock_source(rcc_periph_t periph, rcc_clk_src_t src)
 {
     uint32_t pos;
 
-    switch (periph) {
+    switch (periph)
+    {
     case RCC_PERIPH_USART1:
         pos = RCC_CCIPR_USART1SEL_Pos;
         break;

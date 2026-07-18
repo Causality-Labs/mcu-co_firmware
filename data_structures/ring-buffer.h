@@ -19,13 +19,14 @@
  *
  * Do not modify the fields directly; use the ring_buffer_* API.
  */
-typedef struct {
-    void *buffer;         /**< Caller-supplied backing storage. */
-    size_t element_size;  /**< Size in bytes of a single element. */
-    uint16_t capacity;    /**< Total slot count; must be a power of two. */
-    uint16_t head;        /**< Write index (producer-owned). */
-    uint16_t tail;        /**< Read index (consumer-owned). */
-    uint16_t mask;        /**< capacity - 1, used for index wraparound. */
+typedef struct
+{
+    void *buffer;        /**< Caller-supplied backing storage. */
+    size_t element_size; /**< Size in bytes of a single element. */
+    uint16_t capacity;   /**< Total slot count; must be a power of two. */
+    uint16_t head;       /**< Write index (producer-owned). */
+    uint16_t tail;       /**< Read index (consumer-owned). */
+    uint16_t mask;       /**< capacity - 1, used for index wraparound. */
 } ring_buffer_t;
 
 /**
@@ -100,6 +101,6 @@ bool ring_buffer_is_full(const ring_buffer_t *rb);
 /** @brief Convenience wrapper: write the lvalue @p val by address. */
 #define rb_write(rb, val) ring_buffer_write((rb), &(val))
 /** @brief Convenience wrapper: read into the lvalue @p val by address. */
-#define rb_read(rb, val)  ring_buffer_read((rb), &(val))
+#define rb_read(rb, val) ring_buffer_read((rb), &(val))
 
 #endif /* RING_BUFFER_H */

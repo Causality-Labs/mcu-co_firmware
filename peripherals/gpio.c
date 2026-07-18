@@ -11,9 +11,8 @@ void EXTI9_5_IRQHandler(void);
 void EXTI15_10_IRQHandler(void);
 
 static const rcc_periph_t gpio_rcc_periph[GPIO_NUM_OF_PORTS] = {
-    [GPIO_PORT_A] = RCC_PERIPH_GPIOA, [GPIO_PORT_B] = RCC_PERIPH_GPIOB,
-    [GPIO_PORT_C] = RCC_PERIPH_GPIOC, [GPIO_PORT_D] = RCC_PERIPH_GPIOD,
-    [GPIO_PORT_E] = RCC_PERIPH_GPIOE, [GPIO_PORT_F] = RCC_PERIPH_GPIOF,
+    [GPIO_PORT_A] = RCC_PERIPH_GPIOA, [GPIO_PORT_B] = RCC_PERIPH_GPIOB, [GPIO_PORT_C] = RCC_PERIPH_GPIOC,
+    [GPIO_PORT_D] = RCC_PERIPH_GPIOD, [GPIO_PORT_E] = RCC_PERIPH_GPIOE, [GPIO_PORT_F] = RCC_PERIPH_GPIOF,
     [GPIO_PORT_G] = RCC_PERIPH_GPIOG,
 };
 
@@ -35,11 +34,13 @@ static bool is_valid_port(gpio_port_t port)
 
 static bool check_reserved_pins(const gpio_pin_t *gpio)
 {
-    if ((gpio->port == GPIO_PORT_A) && ((GPIOA_RESERVED_PINS & (1U << gpio->pin)) != 0U)) {
+    if ((gpio->port == GPIO_PORT_A) && ((GPIOA_RESERVED_PINS & (1U << gpio->pin)) != 0U))
+    {
         return false;
     }
 
-    if ((gpio->port == GPIO_PORT_B) && ((GPIOB_RESERVED_PINS & (1U << gpio->pin)) != 0U)) {
+    if ((gpio->port == GPIO_PORT_B) && ((GPIOB_RESERVED_PINS & (1U << gpio->pin)) != 0U))
+    {
         return false;
     }
 
@@ -48,19 +49,23 @@ static bool check_reserved_pins(const gpio_pin_t *gpio)
 
 static bool is_valid_pin(const gpio_pin_t *gpio)
 {
-    if (gpio == NULL) {
+    if (gpio == NULL)
+    {
         return false;
     }
 
-    if (!is_valid_port(gpio->port)) {
+    if (!is_valid_port(gpio->port))
+    {
         return false;
     }
 
-    if (!check_reserved_pins(gpio)) {
+    if (!check_reserved_pins(gpio))
+    {
         return false;
     }
 
-    if (gpio->pin > MAX_PIN_COUNT) {
+    if (gpio->pin > MAX_PIN_COUNT)
+    {
         return false;
     }
 
@@ -84,11 +89,16 @@ bool is_pin_an_af(const gpio_pin_t *gpio)
 
 static IRQn_Type get_exti_irqn(uint8_t pin)
 {
-    if (pin <= 4U) {
+    if (pin <= 4U)
+    {
         return (IRQn_Type)(EXTI0_IRQn + pin);
-    } else if (pin <= 9U) {
+    }
+    else if (pin <= 9U)
+    {
         return EXTI9_5_IRQn;
-    } else {
+    }
+    else
+    {
         return EXTI15_10_IRQn;
     }
 }
@@ -102,15 +112,18 @@ static int gpio_clock_init(gpio_port_t port)
 
 status_t gpio_init(const gpio_pin_t *gpio, const gpio_config_t *config)
 {
-    if (config == NULL) {
+    if (config == NULL)
+    {
         return STATUS_ERR_INVALID_ARG;
     }
 
-    if (!is_valid_pin(gpio)) {
+    if (!is_valid_pin(gpio))
+    {
         return STATUS_ERR_INVALID_PIN;
     }
 
-    if (gpio_clock_init(gpio->port) != 0) {
+    if (gpio_clock_init(gpio->port) != 0)
+    {
         return STATUS_ERR_NOT_INIT;
     }
 
@@ -133,7 +146,8 @@ status_t gpio_init(const gpio_pin_t *gpio, const gpio_config_t *config)
 
 status_t gpio_deinit(const gpio_pin_t *gpio)
 {
-    if (!is_valid_pin(gpio)) {
+    if (!is_valid_pin(gpio))
+    {
         return STATUS_ERR_INVALID_PIN;
     }
 
@@ -144,9 +158,12 @@ status_t gpio_deinit(const gpio_pin_t *gpio)
     port->OSPEEDR &= ~(0x3U << (gpio->pin * 2U));
     port->PUPDR &= ~(0x3U << (gpio->pin * 2U));
 
-    if (gpio->pin < 8U) {
+    if (gpio->pin < 8U)
+    {
         port->AFR[0] &= ~(0xFUL << (gpio->pin * 4U));
-    } else {
+    }
+    else
+    {
         port->AFR[1] &= ~(0xFUL << ((gpio->pin - 8U) * 4U));
     }
 
@@ -155,11 +172,13 @@ status_t gpio_deinit(const gpio_pin_t *gpio)
 
 status_t gpio_set(const gpio_pin_t *gpio)
 {
-    if (!is_valid_pin(gpio)) {
+    if (!is_valid_pin(gpio))
+    {
         return STATUS_ERR_INVALID_PIN;
     }
 
-    if (!is_pin_an_output(gpio)) {
+    if (!is_pin_an_output(gpio))
+    {
         return STATUS_ERR_INVALID_STATE;
     }
 
@@ -171,11 +190,13 @@ status_t gpio_set(const gpio_pin_t *gpio)
 
 status_t gpio_reset(const gpio_pin_t *gpio)
 {
-    if (!is_valid_pin(gpio)) {
+    if (!is_valid_pin(gpio))
+    {
         return STATUS_ERR_INVALID_PIN;
     }
 
-    if (!is_pin_an_output(gpio)) {
+    if (!is_pin_an_output(gpio))
+    {
         return STATUS_ERR_INVALID_STATE;
     }
 
@@ -192,11 +213,13 @@ status_t gpio_set_state(const gpio_pin_t *gpio, gpio_state_t state)
 
 status_t gpio_toggle(const gpio_pin_t *gpio)
 {
-    if (!is_valid_pin(gpio)) {
+    if (!is_valid_pin(gpio))
+    {
         return STATUS_ERR_INVALID_PIN;
     }
 
-    if (!is_pin_an_output(gpio)) {
+    if (!is_pin_an_output(gpio))
+    {
         return STATUS_ERR_INVALID_STATE;
     }
 
@@ -207,21 +230,27 @@ status_t gpio_toggle(const gpio_pin_t *gpio)
 
 status_t gpio_read(const gpio_pin_t *gpio, bool *state)
 {
-    if (state == NULL) {
+    if (state == NULL)
+    {
         return STATUS_ERR_INVALID_ARG;
     }
 
-    if (!is_valid_pin(gpio)) {
+    if (!is_valid_pin(gpio))
+    {
         return STATUS_ERR_INVALID_PIN;
     }
 
-    if (!is_pin_an_input(gpio)) {
+    if (!is_pin_an_input(gpio))
+    {
         return STATUS_ERR_INVALID_STATE;
     }
 
-    if ((get_port(gpio)->IDR & (0x1U << gpio->pin)) != 0U) {
+    if ((get_port(gpio)->IDR & (0x1U << gpio->pin)) != 0U)
+    {
         *state = true;
-    } else {
+    }
+    else
+    {
         *state = false;
     }
 
@@ -230,15 +259,18 @@ status_t gpio_read(const gpio_pin_t *gpio, bool *state)
 
 status_t gpio_init_interrupt(const gpio_pin_t *gpio, const gpio_irq_config_t *config)
 {
-    if (config == NULL) {
+    if (config == NULL)
+    {
         return STATUS_ERR_INVALID_ARG;
     }
 
-    if (!is_valid_pin(gpio)) {
+    if (!is_valid_pin(gpio))
+    {
         return STATUS_ERR_INVALID_PIN;
     }
 
-    if (config->priority > FMAC_IRQn) {
+    if (config->priority > FMAC_IRQn)
+    {
         return STATUS_ERR_INVALID_ARG;
     }
 
@@ -246,7 +278,8 @@ status_t gpio_init_interrupt(const gpio_pin_t *gpio, const gpio_irq_config_t *co
     uint8_t exticr_shift = (gpio->pin % 4U) * 4U;
     uint32_t port_idx    = (uint32_t)gpio->port;
 
-    if (rcc_periph_enable(RCC_PERIPH_SYSCFG) != 0) {
+    if (rcc_periph_enable(RCC_PERIPH_SYSCFG) != 0)
+    {
         return STATUS_ERR_NOT_INIT;
     }
 
@@ -260,11 +293,16 @@ status_t gpio_init_interrupt(const gpio_pin_t *gpio, const gpio_irq_config_t *co
     EXTI->RTSR1 &= ~(1U << gpio->pin);
     EXTI->FTSR1 &= ~(1U << gpio->pin);
 
-    if (config->trigger == RISING) {
+    if (config->trigger == RISING)
+    {
         EXTI->RTSR1 |= (0x1U << gpio->pin);
-    } else if (config->trigger == FALLING) {
+    }
+    else if (config->trigger == FALLING)
+    {
         EXTI->FTSR1 |= (0x1U << gpio->pin);
-    } else {
+    }
+    else
+    {
         EXTI->RTSR1 |= (0x1U << gpio->pin);
         EXTI->FTSR1 |= (0x1U << gpio->pin);
     }
@@ -280,7 +318,8 @@ status_t gpio_init_interrupt(const gpio_pin_t *gpio, const gpio_irq_config_t *co
 
 status_t gpio_deinit_interrupt(const gpio_pin_t *gpio)
 {
-    if (!is_valid_pin(gpio)) {
+    if (!is_valid_pin(gpio))
+    {
         return STATUS_ERR_INVALID_PIN;
     }
 
@@ -303,7 +342,8 @@ status_t gpio_deinit_interrupt(const gpio_pin_t *gpio)
 
 status_t gpio_set_af(const gpio_pin_t *gpio, gpio_af_t af)
 {
-    if (!is_valid_pin(gpio)) {
+    if (!is_valid_pin(gpio))
+    {
         return STATUS_ERR_INVALID_PIN;
     }
 
@@ -311,10 +351,13 @@ status_t gpio_set_af(const gpio_pin_t *gpio, gpio_af_t af)
 
     /* AFR[0] = AFRL (pins 0-7), AFR[1] = AFRH (pins 8-15).
      * Each pin occupies a 4-bit field. */
-    if (gpio->pin < 8U) {
+    if (gpio->pin < 8U)
+    {
         port->AFR[0] &= ~(0xFUL << (gpio->pin * 4U));
         port->AFR[0] |= ((uint32_t)af << (gpio->pin * 4U));
-    } else {
+    }
+    else
+    {
         port->AFR[1] &= ~(0xFUL << ((gpio->pin - 8U) * 4U));
         port->AFR[1] |= ((uint32_t)af << ((gpio->pin - 8U) * 4U));
     }
@@ -326,13 +369,15 @@ status_t gpio_set_af(const gpio_pin_t *gpio, gpio_af_t af)
 run it and then clear the interrupt.*/
 void EXTI0_IRQHandler(void)
 {
-    if (!(EXTI->PR1 & ((1U << 0)))) {
+    if (!(EXTI->PR1 & ((1U << 0))))
+    {
         return;
     }
 
     EXTI->PR1 |= (1U << 0);
 
-    if (irq_callbacks[0] == NULL) {
+    if (irq_callbacks[0] == NULL)
+    {
         return;
     }
 
@@ -343,13 +388,15 @@ void EXTI0_IRQHandler(void)
 
 void EXTI1_IRQHandler(void)
 {
-    if (!(EXTI->PR1 & ((1U << 1)))) {
+    if (!(EXTI->PR1 & ((1U << 1))))
+    {
         return;
     }
 
     EXTI->PR1 |= (1U << 1);
 
-    if (irq_callbacks[1] == NULL) {
+    if (irq_callbacks[1] == NULL)
+    {
         return;
     }
 
@@ -360,13 +407,15 @@ void EXTI1_IRQHandler(void)
 
 void EXTI2_IRQHandler(void)
 {
-    if (!(EXTI->PR1 & (1U << 2U))) {
+    if (!(EXTI->PR1 & (1U << 2U)))
+    {
         return;
     }
 
     EXTI->PR1 |= (1U << 2U);
 
-    if (irq_callbacks[2] == NULL) {
+    if (irq_callbacks[2] == NULL)
+    {
         return;
     }
 
@@ -375,13 +424,15 @@ void EXTI2_IRQHandler(void)
 
 void EXTI3_IRQHandler(void)
 {
-    if (!(EXTI->PR1 & (1U << 3U))) {
+    if (!(EXTI->PR1 & (1U << 3U)))
+    {
         return;
     }
 
     EXTI->PR1 |= (1U << 3U);
 
-    if (irq_callbacks[3] == NULL) {
+    if (irq_callbacks[3] == NULL)
+    {
         return;
     }
 
@@ -390,13 +441,15 @@ void EXTI3_IRQHandler(void)
 
 void EXTI4_IRQHandler(void)
 {
-    if (!(EXTI->PR1 & (1U << 4U))) {
+    if (!(EXTI->PR1 & (1U << 4U)))
+    {
         return;
     }
 
     EXTI->PR1 |= (1U << 4U);
 
-    if (irq_callbacks[4] == NULL) {
+    if (irq_callbacks[4] == NULL)
+    {
         return;
     }
 
@@ -405,14 +458,17 @@ void EXTI4_IRQHandler(void)
 
 void EXTI9_5_IRQHandler(void)
 {
-    for (uint8_t pin = 5U; pin <= 9U; pin++) {
-        if (!(EXTI->PR1 & (1U << pin))) {
+    for (uint8_t pin = 5U; pin <= 9U; pin++)
+    {
+        if (!(EXTI->PR1 & (1U << pin)))
+        {
             continue;
         }
 
         EXTI->PR1 |= (1U << pin);
 
-        if (irq_callbacks[pin] == NULL) {
+        if (irq_callbacks[pin] == NULL)
+        {
             continue;
         }
 
@@ -424,14 +480,17 @@ void EXTI9_5_IRQHandler(void)
 
 void EXTI15_10_IRQHandler(void)
 {
-    for (uint8_t pin = 10U; pin <= 15U; pin++) {
-        if (!(EXTI->PR1 & (1U << pin))) {
+    for (uint8_t pin = 10U; pin <= 15U; pin++)
+    {
+        if (!(EXTI->PR1 & (1U << pin)))
+        {
             continue;
         }
 
         EXTI->PR1 |= (1U << pin);
 
-        if (irq_callbacks[pin] == NULL) {
+        if (irq_callbacks[pin] == NULL)
+        {
             continue;
         }
 

@@ -2,18 +2,20 @@
 #include <stddef.h>
 #include "ring-buffer.h"
 
-
 status_t ring_buffer_init(ring_buffer_t *rb, void *buffer, uint16_t capacity, size_t element_size)
 {
-    if (rb == NULL || buffer == NULL) {
+    if (rb == NULL || buffer == NULL)
+    {
         return STATUS_ERR_INVALID_ARG;
     }
 
-    if (element_size == 0U) {
+    if (element_size == 0U)
+    {
         return STATUS_ERR_INVALID_ARG;
     }
 
-    if ((capacity == 0U) || ((capacity & (capacity - 1U)) != 0U)) {
+    if ((capacity == 0U) || ((capacity & (capacity - 1U)) != 0U))
+    {
         return STATUS_ERR_INVALID_ARG;
     }
 
@@ -29,7 +31,8 @@ status_t ring_buffer_init(ring_buffer_t *rb, void *buffer, uint16_t capacity, si
 
 bool ring_buffer_is_empty(const ring_buffer_t *rb)
 {
-    if (rb == NULL) {
+    if (rb == NULL)
+    {
         return false;
     }
 
@@ -38,7 +41,8 @@ bool ring_buffer_is_empty(const ring_buffer_t *rb)
 
 bool ring_buffer_is_full(const ring_buffer_t *rb)
 {
-    if (rb == NULL) {
+    if (rb == NULL)
+    {
         return false;
     }
 
@@ -47,7 +51,8 @@ bool ring_buffer_is_full(const ring_buffer_t *rb)
 
 status_t ring_buffer_write(ring_buffer_t *rb, const void *element)
 {
-    if (rb == NULL || element == NULL) {
+    if (rb == NULL || element == NULL)
+    {
         return STATUS_ERR_INVALID_ARG;
     }
 
@@ -60,11 +65,13 @@ status_t ring_buffer_write(ring_buffer_t *rb, const void *element)
 
 status_t ring_buffer_read(ring_buffer_t *rb, void *element)
 {
-    if (rb == NULL || element == NULL) {
+    if (rb == NULL || element == NULL)
+    {
         return STATUS_ERR_INVALID_ARG;
     }
 
-    if (ring_buffer_is_empty(rb)) {
+    if (ring_buffer_is_empty(rb))
+    {
         return STATUS_ERR_EMPTY;
     }
 
@@ -77,7 +84,8 @@ status_t ring_buffer_read(ring_buffer_t *rb, void *element)
 
 status_t ring_buffer_flush(ring_buffer_t *rb)
 {
-    if (rb == NULL) {
+    if (rb == NULL)
+    {
         return STATUS_ERR_INVALID_ARG;
     }
 

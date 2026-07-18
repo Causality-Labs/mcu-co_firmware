@@ -11,7 +11,8 @@
 #define GPIO_NUM_OF_PORTS   7U
 #define MAX_GPIO_INTERRUPTS 16
 
-typedef enum {
+typedef enum
+{
     GPIO_PORT_A = 0U,
     GPIO_PORT_B = 1U,
     GPIO_PORT_C = 2U,
@@ -21,48 +22,56 @@ typedef enum {
     GPIO_PORT_G = 6U,
 } gpio_port_t;
 
-typedef struct {
+typedef struct
+{
     gpio_port_t port;
     uint8_t pin;
 } gpio_pin_t;
 
-typedef enum {
+typedef enum
+{
     GPIO_MODE_INPUT  = 0U,
     GPIO_MODE_OUTPUT = 1U,
     GPIO_MODE_AF     = 2U,
     GPIO_MODE_ANALOG = 3U,
 } gpio_mode_t;
 
-typedef enum {
+typedef enum
+{
     GPIO_TYPE_PUSH_PULL  = 0U,
     GPIO_TYPE_OPEN_DRAIN = 1U,
 } gpio_type_t;
 
-typedef enum {
+typedef enum
+{
     GPIO_SPEED_LOW       = 0U,
     GPIO_SPEED_MEDIUM    = 1U,
     GPIO_SPEED_HIGH      = 2U,
     GPIO_SPEED_VERY_HIGH = 3U,
 } gpio_speed_t;
 
-typedef enum {
+typedef enum
+{
     GPIO_PULL_NONE = 0U,
     GPIO_PULL_UP   = 1U,
     GPIO_PULL_DOWN = 2U,
 } gpio_pull_t;
 
-typedef enum {
+typedef enum
+{
     GPIO_LOW  = 0U,
     GPIO_HIGH = 1U,
 } gpio_state_t;
 
-typedef enum {
+typedef enum
+{
     RISING  = 0U,
     FALLING = 1U,
     BOTH    = 2U,
 } gpio_trigger_t;
 
-typedef enum {
+typedef enum
+{
     GPIO_AF0  = 0U,
     GPIO_AF1  = 1U,
     GPIO_AF2  = 2U,
@@ -86,7 +95,8 @@ typedef void (*gpio_irq_callback_t)(void);
 /**
  * @brief GPIO pin configuration parameters.
  */
-typedef struct {
+typedef struct
+{
     gpio_mode_t mode;
     gpio_type_t type;
     gpio_speed_t speed;
@@ -96,7 +106,8 @@ typedef struct {
 /**
  * @brief GPIO external interrupt configuration parameters.
  */
-typedef struct {
+typedef struct
+{
     gpio_trigger_t trigger;
     gpio_irq_callback_t callback;
     uint8_t priority;
