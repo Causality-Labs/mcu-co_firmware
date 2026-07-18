@@ -7,6 +7,7 @@
 #include "status.h"
 #include "frame_parser.h"
 #include "crc16.h"
+#include "command_dispatcher.h"
 
 #define MODULE_NAME "MAIN"
 
@@ -85,8 +86,7 @@ int main(void)
             if (frame_status == FRAME_READY)
             {
 
-                int serialized_frame_size =
-                    frame_parser_serialize(&frame, serialized_frame, serialized_frame_buffer_size);
+                int serialized_frame_size = frame_parser_serialize(&frame, serialized_frame, serialized_frame_buffer_size);
                 frame_parser_get_crc(&frame, &recv_crc);
 
                 uint16_t crc_computed = crc16_compute(serialized_frame, (uint8_t)serialized_frame_size);
@@ -99,16 +99,27 @@ int main(void)
 
                 // good crc
                 LOG_INFO(MODULE_NAME, "Valid frame recieved.");
+                response_t resp;
+                status_t disp_status = dispatch_command(&frame, &resp);
+
+                if (disp_status != STATUS_OK)
+                {
+                    LOG_ERROR(MODULE_NAME, "dispatch_command() failed.");
+                    continue;
+                }
+
+                // Build return response
+                LOG_INFO(MODULE_NAME, "Command dispatched.");
             }
 
             if (frame_status == FRAME_ERROR)
             {
-                LOG_INFO(MODULE_NAME, "Frame Error.");
+                LOG_ERROR(MODULE_NAME, "Frame Error.");
             }
         }
 
         logger_flush();
-        delay_ms(10U);
+        delay_ms(5U);
     }
 
     return 0;

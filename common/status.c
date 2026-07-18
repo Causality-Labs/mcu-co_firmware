@@ -6,6 +6,8 @@ const char *status_to_str(status_t status)
     {
     case STATUS_OK:
         return "OK";
+    case STATUS_ERR:
+        return "ERR";
     case STATUS_ERR_INVALID_ARG:
         return "INVALID_ARG";
     case STATUS_ERR_INVALID_PIN:

@@ -48,9 +48,8 @@ static const uart_pins_t uart_pins[NUM_OF_UART_PORTS] = {
 };
 
 static const IRQn_Type uart_irqn[NUM_OF_UART_PORTS] = {
-    [UART_INSTANCE_USART1] = USART1_IRQn, [UART_INSTANCE_USART2] = USART2_IRQn,
-    [UART_INSTANCE_USART3] = USART3_IRQn, [UART_INSTANCE_UART4] = UART4_IRQn,
-    [UART_INSTANCE_UART5] = UART5_IRQn,   [UART_INSTANCE_LPUART1] = LPUART1_IRQn,
+    [UART_INSTANCE_USART1] = USART1_IRQn, [UART_INSTANCE_USART2] = USART2_IRQn, [UART_INSTANCE_USART3] = USART3_IRQn,
+    [UART_INSTANCE_UART4] = UART4_IRQn,   [UART_INSTANCE_UART5] = UART5_IRQn,   [UART_INSTANCE_LPUART1] = LPUART1_IRQn,
 };
 
 static bool uart_initialized[NUM_OF_UART_PORTS] = {
@@ -285,8 +284,7 @@ status_t uart_init(uart_instance_t instance, const uart_config_t *config, const 
             return STATUS_ERR_INVALID_ARG;
         }
 
-        if (ring_buffer_init(&rx_buffers[instance], rx_buffer->buffer, rx_buffer->size, sizeof(uint8_t)) !=
-            STATUS_OK)
+        if (ring_buffer_init(&rx_buffers[instance], rx_buffer->buffer, rx_buffer->size, sizeof(uint8_t)) != STATUS_OK)
         {
             return STATUS_ERR_INVALID_ARG;
         }
