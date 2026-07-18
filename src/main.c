@@ -6,6 +6,7 @@
 #include "systick.h"
 #include "status.h"
 #include "frame_parser.h"
+#include "crc16.h"
 
 #define MODULE_NAME "MAIN"
 
@@ -61,14 +62,38 @@ int main(void)
     LOG_INFO(MODULE_NAME, "entering main loop");
     uint8_t data_byte = 0;
     frame_t frame = {0};
+    frame_results_t frame_status = FRAME_PENDING;
     frame.state = SOF;
 
-    for (;;) {
-        while (uart_read_byte(commands_transport, &data_byte) == STATUS_OK) {
-            if (frame_parser_feed(&frame, data_byte) == FRAME_READY) {
+    uint8_t serialized_frame[2 + MAX_PAYLOAD] = {0};
+    uint8_t serialized_frame_buffer_size = 2 + MAX_PAYLOAD;
+    uint16_t recv_crc = 0;
 
-                // dispatch command
+    for (;;) {
+        while (uart_read_byte(commands_transport, &data_byte) == STATUS_OK)
+        {
+
+            frame_status = frame_parser_feed(&frame, data_byte);
+            if (frame_status == FRAME_READY)
+            {
+
+                int serialized_frame_size = frame_parser_serialize(&frame, serialized_frame, serialized_frame_buffer_size);
+                frame_parser_get_crc(&frame, &recv_crc);
+
+                uint16_t crc_computed =  crc16_compute(serialized_frame, (uint8_t)serialized_frame_size);
+                if (crc16_compare(crc_computed, recv_crc) != true) {
+                    // Bad crc.
+                    LOG_INFO(MODULE_NAME, "CRC frame error.");
+                    continue;
+                }
+
+                // good crc
                 LOG_INFO(MODULE_NAME, "Valid frame recieved.");
+            }
+
+            if (frame_status == FRAME_ERROR)
+            {
+                LOG_INFO(MODULE_NAME, "Frame Error.");
             }
         }
 
