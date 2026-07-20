@@ -110,7 +110,7 @@ int main(void)
         }
 
         logger_flush();
-        delay_ms(5U);
+        __WFI();
     }
 
     return 0;
