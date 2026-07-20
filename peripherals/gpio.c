@@ -110,6 +110,23 @@ static int gpio_clock_init(gpio_port_t port)
     return (rcc_periph_enable(gpio_rcc) != 0);
 }
 
+static bool is_gpio_line_an_interrupt(const gpio_pin_t *gpio)
+{
+    uint32_t port_idx    = (uint32_t)gpio->port;
+    uint8_t exticr_idx   = gpio->pin / 4U;
+    uint8_t exticr_shift = (gpio->pin % 4U) * 4U;
+
+    uint32_t current_owner = (SYSCFG->EXTICR[exticr_idx] >> exticr_shift) & 0xFU;
+    bool line_active = (EXTI->IMR1 & (0x1U << gpio->pin)) != 0U;
+
+    if (line_active && (current_owner != port_idx))
+    {
+        return true;
+    }
+
+    return false;
+}
+
 status_t gpio_init(const gpio_pin_t *gpio, const gpio_config_t *config)
 {
     if (config == NULL)
@@ -281,6 +298,11 @@ status_t gpio_init_interrupt(const gpio_pin_t *gpio, const gpio_irq_config_t *co
     if (rcc_periph_enable(RCC_PERIPH_SYSCFG) != 0)
     {
         return STATUS_ERR_NOT_INIT;
+    }
+
+    if (is_gpio_line_an_interrupt(gpio) == true)
+    {
+        return STATUS_ERR_BUSY;
     }
 
     SYSCFG->EXTICR[exticr_idx] &= ~(0xFU << exticr_shift);

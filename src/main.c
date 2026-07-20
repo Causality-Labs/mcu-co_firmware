@@ -59,15 +59,6 @@ int main(void)
     LOG_INFO(MODULE_NAME, "boot");
     LOG_DEBUG(MODULE_NAME, "logger initialised");
 
-    // const gpio_config_t led_config = {
-    //     .mode  = GPIO_MODE_OUTPUT,
-    //     .type  = GPIO_TYPE_PUSH_PULL,
-    //     .speed = GPIO_SPEED_LOW,
-    //     .pull  = GPIO_PULL_NONE,
-    // };
-
-    LOG_DEBUG(MODULE_NAME, "LED configured");
-
     LOG_INFO(MODULE_NAME, "entering main loop");
     uint8_t data_byte = 0;
     frame_t frame     = {0};

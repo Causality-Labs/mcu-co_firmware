@@ -27,8 +27,19 @@ MAX_PAYLOAD = 32  # from frame_parser.h
 OPCODE  = 0x30  # GPIO_CFG
 PAYLOAD = bytes([0x01, 0x00, 0x05])  # [DIR=output, PORT=A, PIN=5]
 
-GPIO_WRITE_OPCODE = 0x31  # GPIO_WRITE
-GPIO_READ_OPCODE  = 0x32  # GPIO_READ
+GPIO_WRITE_OPCODE    = 0x31  # GPIO_WRITE
+GPIO_READ_OPCODE     = 0x32  # GPIO_READ
+GPIO_IRQ_BIND_OPCODE = 0x33  # GPIO_IRQ_BIND
+GPIO_IRQ_CFG_OPCODE  = 0x34  # GPIO_IRQ_CFG
+
+EDGE_OFF     = 0x00
+EDGE_RISING  = 0x01
+EDGE_FALLING = 0x02
+EDGE_BOTH    = 0x03
+
+ACTION_LOW    = 0x00
+ACTION_HIGH   = 0x01
+ACTION_TOGGLE = 0x02
 
 
 def crc16_ccitt_false(data: bytes) -> int:
@@ -100,6 +111,48 @@ def build_gpio_read_pc13() -> bytes:
     return bytes([SOF]) + body + bytes([crc & 0xFF, (crc >> 8) & 0xFF])
 
 
+def build_gpio_irq_cfg(edge: int, port: int, pin: int) -> bytes:
+    """gpio irq cfg <edge> <port> <pin> - arm (or disarm, edge=EDGE_OFF) an EXTI trigger."""
+    payload = bytes([edge, port, pin])
+    body = bytes([GPIO_IRQ_CFG_OPCODE, len(payload)]) + payload
+    crc = crc16_ccitt_false(body)
+    return bytes([SOF]) + body + bytes([crc & 0xFF, (crc >> 8) & 0xFF])
+
+
+def build_gpio_irq_bind(edge_select: int, in_port: int, in_pin: int,
+                         action: int, out_port: int, out_pin: int) -> bytes:
+    """gpio irq bind <edge> <in_port> <in_pin> <action> <out_port> <out_pin>."""
+    payload = bytes([edge_select, in_port, in_pin, action, out_port, out_pin])
+    body = bytes([GPIO_IRQ_BIND_OPCODE, len(payload)]) + payload
+    crc = crc16_ccitt_false(body)
+    return bytes([SOF]) + body + bytes([crc & 0xFF, (crc >> 8) & 0xFF])
+
+
+def run_irq_bind_demo(cmd_ser, step_delay_s: float = 0.3):
+    """
+    Wires the Nucleo B1 button (PC13) to toggle the LED (PA5) entirely on the
+    MCU: cfg PC13 as input, PA5 as output, set PA5 low as a known starting
+    point, arm PC13 for both edges, then bind both edges to toggle PA5.
+
+    After the last ACK, the host is out of the loop - pressing the button
+    should flip the LED with no further frames sent. Watch the LED, or the
+    log UART, to confirm.
+    """
+    steps = [
+        ("gpio cfg input C 13", build_gpio_cfg_input_pc13()),
+        ("gpio cfg output A 5", build_valid_frame()),
+        ("gpio set low A 5", build_gpio_write_pa5(0)),
+        ("gpio irq cfg both C 13", build_gpio_irq_cfg(EDGE_BOTH, 0x02, 0x0D)),
+        ("gpio irq bind both C 13 toggle A 5",
+         build_gpio_irq_bind(EDGE_BOTH, 0x02, 0x0D, ACTION_TOGGLE, 0x00, 0x05)),
+    ]
+
+    for name, frame in steps:
+        cmd_ser.write(frame)
+        print(f"Sent [{name}]: {frame.hex(' ')}")
+        time.sleep(step_delay_s)
+
+
 def run_blink_led_test(cmd_ser, toggle_count: int = 20, period_s: float = 0.5):
     """
     Configure PA5 (the Nucleo board's LED pin) as an output, then drive it
@@ -135,6 +188,7 @@ MENU_OPTIONS = {
 
 ACTIONS = {
     '5': ("Blink LED (PA5): cfg output, then toggle high/low", run_blink_led_test),
+    '8': ("Bind button (PC13) both-edge -> toggle LED (PA5)", run_irq_bind_demo),
 }
 
 
