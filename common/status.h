@@ -12,6 +12,7 @@
 typedef enum
 {
     STATUS_OK = 0,            /**< Operation completed successfully.            */
+    STATUS_ERR,               /**< Generic/unspecified failure.                 */
     STATUS_ERR_INVALID_ARG,   /**< NULL pointer or out-of-range enum argument.  */
     STATUS_ERR_INVALID_PIN,   /**< Pin number out of range or a reserved pin.   */
     STATUS_ERR_INVALID_STATE, /**< Resource not configured for this operation.  */
