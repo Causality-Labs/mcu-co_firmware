@@ -5,17 +5,18 @@
 #include "gpio.h"
 
 /* Matches the wire ACTION field 1:1 (mcu-co_Protocol.md: low=0, high=1, toggle=2). */
-typedef enum {
+typedef enum
+{
     IRQ_ACTION_LOW    = 0U,
     IRQ_ACTION_HIGH   = 1U,
     IRQ_ACTION_TOGGLE = 2U,
 } irq_action_t;
 
-typedef struct {
+typedef struct
+{
     gpio_pin_t input_pin;
     gpio_pin_t output_pin;
     irq_action_t action;
-    gpio_trigger_t trigger;
     bool active;
 } irq_binding_t;
 

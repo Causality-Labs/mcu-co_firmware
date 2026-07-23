@@ -117,7 +117,7 @@ static bool is_gpio_line_an_interrupt(const gpio_pin_t *gpio)
     uint8_t exticr_shift = (gpio->pin % 4U) * 4U;
 
     uint32_t current_owner = (SYSCFG->EXTICR[exticr_idx] >> exticr_shift) & 0xFU;
-    bool line_active = (EXTI->IMR1 & (0x1U << gpio->pin)) != 0U;
+    bool line_active       = (EXTI->IMR1 & (0x1U << gpio->pin)) != 0U;
 
     if (line_active && (current_owner != port_idx))
     {

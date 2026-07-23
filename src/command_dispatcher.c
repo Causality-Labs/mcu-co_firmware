@@ -7,12 +7,12 @@
 
 #define MODULE_NAME "COMMAND DISPATCHER"
 
-#define GPIO_CFG         0x30U
-#define GPIO_WRITE       0x31U
-#define GPIO_READ        0x32U
-#define GPIO_IRQ_BIND    0x33U
-#define GPIO_IRQ_CFG     0x34U
-#define GPIO_IRQ_UNBIND  0x35U
+#define GPIO_CFG        0x30U
+#define GPIO_WRITE      0x31U
+#define GPIO_READ       0x32U
+#define GPIO_IRQ_BIND   0x33U
+#define GPIO_IRQ_CFG    0x34U
+#define GPIO_IRQ_UNBIND 0x35U
 
 status_t dispatch_command(frame_t *frame, response_t *resp)
 {

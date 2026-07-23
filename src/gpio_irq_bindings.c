@@ -13,20 +13,20 @@ static void irq_action_dispatch(uint8_t line)
 
     switch (irq_bindings[line].action)
     {
-        case IRQ_ACTION_LOW:
-            (void)gpio_set_state(&irq_bindings[line].output_pin, GPIO_LOW);
-            break;
+    case IRQ_ACTION_LOW:
+        (void)gpio_set_state(&irq_bindings[line].output_pin, GPIO_LOW);
+        break;
 
-        case IRQ_ACTION_HIGH:
-            (void)gpio_set_state(&irq_bindings[line].output_pin, GPIO_HIGH);
-            break;
+    case IRQ_ACTION_HIGH:
+        (void)gpio_set_state(&irq_bindings[line].output_pin, GPIO_HIGH);
+        break;
 
-        case IRQ_ACTION_TOGGLE:
-            (void)gpio_toggle(&irq_bindings[line].output_pin);
-            break;
+    case IRQ_ACTION_TOGGLE:
+        (void)gpio_toggle(&irq_bindings[line].output_pin);
+        break;
 
-        default:
-            break;
+    default:
+        break;
     }
 }
 
@@ -111,8 +111,7 @@ static void irq_dispatch_15(void)
 }
 
 const gpio_irq_callback_t irq_dispatch_table[MAX_GPIO_INTERRUPTS] = {
-    irq_dispatch_0,  irq_dispatch_1,  irq_dispatch_2,  irq_dispatch_3,
-    irq_dispatch_4,  irq_dispatch_5,  irq_dispatch_6,  irq_dispatch_7,
-    irq_dispatch_8,  irq_dispatch_9,  irq_dispatch_10, irq_dispatch_11,
+    irq_dispatch_0,  irq_dispatch_1,  irq_dispatch_2,  irq_dispatch_3,  irq_dispatch_4,  irq_dispatch_5,
+    irq_dispatch_6,  irq_dispatch_7,  irq_dispatch_8,  irq_dispatch_9,  irq_dispatch_10, irq_dispatch_11,
     irq_dispatch_12, irq_dispatch_13, irq_dispatch_14, irq_dispatch_15,
 };

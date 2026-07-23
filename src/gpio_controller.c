@@ -25,7 +25,7 @@
 #define GPIO_READ_PIN_IDX     1U
 
 #define GPIO_CFG_IRQ_PAYLOAD_LEN 3U
-#define GPIO_CFG_IRQ_EDGE_IDX     0U
+#define GPIO_CFG_IRQ_EDGE_IDX    0U
 #define GPIO_CFG_IRQ_PORT_IDX    1U
 #define GPIO_CFG_IRQ_PIN_IDX     2U
 
@@ -46,7 +46,6 @@
 #define GPIO_IRQ_UNBIND_PORT_IDX    0U
 #define GPIO_IRQ_UNBIND_PIN_IDX     1U
 
-
 static status_t wire_edge_to_trigger(const uint8_t edge, gpio_trigger_t *trigger)
 {
     if (trigger == NULL)
@@ -56,21 +55,20 @@ static status_t wire_edge_to_trigger(const uint8_t edge, gpio_trigger_t *trigger
 
     switch (edge)
     {
-        case GPIO_IRQ_EDGE_RISING:
-            *trigger = RISING;
-            return STATUS_OK;
+    case GPIO_IRQ_EDGE_RISING:
+        *trigger = RISING;
+        return STATUS_OK;
 
-        case GPIO_IRQ_EDGE_FALLING:
-            *trigger = FALLING;
-            return STATUS_OK;
+    case GPIO_IRQ_EDGE_FALLING:
+        *trigger = FALLING;
+        return STATUS_OK;
 
-        case GPIO_IRQ_EDGE_BOTH:
-            *trigger = BOTH;
-            return STATUS_OK;
+    case GPIO_IRQ_EDGE_BOTH:
+        *trigger = BOTH;
+        return STATUS_OK;
 
-        default:
-            return STATUS_ERR_INVALID_ARG;
-
+    default:
+        return STATUS_ERR_INVALID_ARG;
     }
 }
 
@@ -102,10 +100,7 @@ status_t gpio_controller_irq_cfg(const uint8_t *payload, uint8_t length)
         return STATUS_ERR_INVALID_PIN;
     }
 
-    const gpio_pin_t gpio_pin = {
-        .port = (gpio_port_t)port,
-        .pin = pin
-    };
+    const gpio_pin_t gpio_pin = {.port = (gpio_port_t)port, .pin = pin};
 
     if (edge == GPIO_IRQ_EDGE_OFF)
     {
@@ -166,8 +161,8 @@ status_t gpio_controller_irq_bind(const uint8_t *payload, uint8_t length)
     uint8_t out_port = payload[GPIO_IRQ_BIND_OUT_PORT_IDX];
     uint8_t out_pin  = payload[GPIO_IRQ_BIND_OUT_PIN_IDX];
 
-    if ((in_port >= GPIO_NUM_OF_PORTS) || (in_pin > MAX_PIN_COUNT)
-        || (out_port >= GPIO_NUM_OF_PORTS) || (out_pin > MAX_PIN_COUNT))
+    if ((in_port >= GPIO_NUM_OF_PORTS) || (in_pin > MAX_PIN_COUNT) || (out_port >= GPIO_NUM_OF_PORTS) ||
+        (out_pin > MAX_PIN_COUNT))
     {
         return STATUS_ERR_INVALID_PIN;
     }
@@ -178,8 +173,8 @@ status_t gpio_controller_irq_bind(const uint8_t *payload, uint8_t length)
         return STATUS_ERR_INVALID_ARG;
     }
 
-    if ((action != (uint8_t)IRQ_ACTION_LOW) && (action != (uint8_t)IRQ_ACTION_HIGH)
-        && (action != (uint8_t)IRQ_ACTION_TOGGLE))
+    if ((action != (uint8_t)IRQ_ACTION_LOW) && (action != (uint8_t)IRQ_ACTION_HIGH) &&
+        (action != (uint8_t)IRQ_ACTION_TOGGLE))
     {
         return STATUS_ERR_INVALID_ARG;
     }
@@ -375,12 +370,4 @@ status_t gpio_controller_read(const uint8_t *payload, uint8_t length, bool *stat
     };
 
     return gpio_read(&gpio, state);
-}
-
-status_t gpio_controller_irq(const uint8_t *payload, uint8_t length)
-{
-    (void)payload;
-    (void)length;
-
-    return STATUS_ERR_UNSUPPORTED;
 }
