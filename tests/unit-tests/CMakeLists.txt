@@ -26,16 +26,14 @@ set(FIRMWARE_ROOT ${CMAKE_SOURCE_DIR}/../..)
 add_executable(unit_tests
   AllTests.cpp
   test_ring_buffer.cpp
-
-  # test_status.cpp
-  # test_crc16.cpp
-  # test_frame_parser.cpp
+  test_status.cpp
+  test_crc16.cpp
+  test_frame_parser.cpp
 
   ${FIRMWARE_ROOT}/data_structures/ring-buffer.c
   ${FIRMWARE_ROOT}/common/status.c
-
-  # ${FIRMWARE_ROOT}/common/crc16.c
-  # ${FIRMWARE_ROOT}/src/frame_parser.c
+  ${FIRMWARE_ROOT}/common/crc16.c
+  ${FIRMWARE_ROOT}/src/frame_parser.c
 )
 
 target_include_directories(unit_tests PRIVATE

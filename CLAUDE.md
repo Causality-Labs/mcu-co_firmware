@@ -28,7 +28,33 @@ All workflows go through `./buildmcu-co.sh` (wraps CMake; build dir is `build/`)
 Output is `-Werror` with `-Wconversion -Wsign-conversion -Wshadow -Wmissing-prototypes`
 etc. — warnings fail the build. `serial_test.py` reads UART output over a serial port.
 
-There is no unit test suite yet (`tests/` is empty); ring-buffer tests are planned (`TODO.md`).
+## Unit testing
+
+Host-native tests using **CppUTest** (fetched via CMake `FetchContent`, pinned to
+`v4.0`) live in `tests/unit-tests/`, a standalone CMake project separate from the
+root one — the root `CMakeLists.txt` force-sets the ARM cross toolchain, so tests
+build and run with the system `gcc`/`g++`, not `arm-none-eabi-gcc`.
+
+- `./buildmcu-co.sh -t` — configure, build, and run the suite (in `build-tests/`,
+  separate from the firmware's `build/`). Uses `ctest --verbose` so every
+  individual `TEST(...)` name always prints, not just failures.
+- All test files link into one `unit_tests` binary via `AllTests.cpp`
+  (`CommandLineTestRunner::RunAllTests`) — CppUTest convention: one runner, not
+  one binary per module. `add_test()` in `tests/unit-tests/CMakeLists.txt` bakes
+  in `-v` permanently.
+- Only pure-logic modules with **no CMSIS/register includes** are tested this
+  way: `data_structures/ring-buffer.c`, `common/status.c`, `common/crc16.c`
+  (`src/frame_parser.c` planned next). Peripheral drivers (`gpio.c`, `uart.c`,
+  `rcc.c`) touch registers directly and need mocking
+  (`CppUTestExt::MockSupportPlugin`, via `tests/unit-tests/fakes/`) before they
+  can be tested this way.
+- Test naming: `TEST(GroupName, FunctionBehaviorDescription)`, e.g.
+  `WriteFailsWhenBufferIsFull`. Group every test file's cases under a
+  `/* --- function_name --- */` comment per production function, with a
+  one-line comment directly above each `TEST(...)` stating what it checks.
+- Prioritize tests that guard the function's documented `@return`/error
+  contract (NULL/zero/invalid-arg rejection) plus one happy-path test, over
+  exhaustive coverage of every internal field or edge case.
 
 ## Compliance — this constrains how you write code
 
