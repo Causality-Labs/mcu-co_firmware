@@ -210,7 +210,7 @@ static void uart_irq_handler(uart_instance_t instance)
     if ((uart_channel->ISR & USART_ISR_RXNE) != 0U)
     {
         uint8_t byte = (uint8_t)(uart_channel->RDR & 0xFFU);
-        (void)ring_buffer_write(&rx_buffers[instance], &byte);
+        (void)ring_buffer_write(&rx_buffers[instance], &byte, false);
     }
 }
 

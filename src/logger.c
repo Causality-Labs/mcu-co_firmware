@@ -105,7 +105,7 @@ void logger_log(log_level_t level, const char *module, const char *message)
     entry.module  = module;
     entry.message = message;
 
-    (void)ring_buffer_write(&log_queue, &entry);
+    (void)ring_buffer_write(&log_queue, &entry, false);
 }
 
 void logger_flush(void)
