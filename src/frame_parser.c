@@ -3,6 +3,11 @@
 
 frame_results_t frame_parser_feed(frame_t *frame, uint8_t data_byte)
 {
+    if (frame == NULL)
+    {
+        return FRAME_ERROR;
+    }
+
     switch (frame->state)
     {
     case SOF:

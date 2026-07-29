@@ -49,11 +49,21 @@ bool ring_buffer_is_full(const ring_buffer_t *rb)
     return ((rb->head + 1U) & rb->mask) == rb->tail;
 }
 
-status_t ring_buffer_write(ring_buffer_t *rb, const void *element)
+status_t ring_buffer_write(ring_buffer_t *rb, const void *element, bool overwrite)
 {
     if (rb == NULL || element == NULL)
     {
         return STATUS_ERR_INVALID_ARG;
+    }
+
+    if (ring_buffer_is_full(rb))
+    {
+        if (!overwrite)
+        {
+            return STATUS_ERR_FULL;
+        }
+
+        rb->tail = (uint16_t)((rb->tail + 1U) & rb->mask);
     }
 
     uint8_t *dst = (uint8_t *)rb->buffer + (rb->head * rb->element_size);

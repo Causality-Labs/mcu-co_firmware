@@ -3,6 +3,7 @@ set -e
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 BUILD_DIR="${SCRIPT_DIR}/build"
+TEST_BUILD_DIR="${SCRIPT_DIR}/build-tests"
 
 usage() {
     echo "Usage: $0 <options>"
@@ -15,6 +16,7 @@ usage() {
     echo "  -f <tool>    Flash firmware (tool: st, ocd)"
     echo "  -F           Format source files with clang-format"
     echo "  -s <tool>    Run static analysis (tool: clang, cpp, both)"
+    echo "  -t           Build and run the host-native unit test suite (tests/unit-tests)"
     echo "  -h           Print this help message"
     exit 0
 }
@@ -83,6 +85,12 @@ cmd_format() {
     cmake --build "${BUILD_DIR}" --target format
 }
 
+cmd_test() {
+    cmake -S "${SCRIPT_DIR}/tests/unit-tests" -B "${TEST_BUILD_DIR}"
+    cmake --build "${TEST_BUILD_DIR}"
+    ctest --test-dir "${TEST_BUILD_DIR}" --verbose
+}
+
 cmd_flash() {
     case "$1" in
         st)
@@ -104,7 +112,7 @@ fi
 
 LOG_LEVEL_ARG="debug"
 
-while getopts "bcf:Fl:s:h" opt; do
+while getopts "bcf:Fl:s:th" opt; do
     case "${opt}" in
         b)
             cmd_build
@@ -123,6 +131,9 @@ while getopts "bcf:Fl:s:h" opt; do
             ;;
         s)
             cmd_static_analysis "${OPTARG}"
+            ;;
+        t)
+            cmd_test
             ;;
         h)
             usage

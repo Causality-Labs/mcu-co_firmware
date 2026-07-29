@@ -49,15 +49,19 @@ status_t ring_buffer_init(ring_buffer_t *rb, void *buffer, uint16_t capacity, si
  * @brief Copy one element into the buffer.
  *
  * Copies @p element_size bytes from @p element into the next free slot and
- * advances the head. Fails if the buffer is full; existing data is never
- * overwritten.
+ * advances the head. If the buffer is full, behaviour depends on
+ * @p overwrite: when false, the write fails and existing data is never
+ * touched; when true, the oldest element is evicted (tail advances) to make
+ * room and the write always succeeds.
  *
- * @param rb      Ring buffer to write to
- * @param element Pointer to the element to copy in
+ * @param rb        Ring buffer to write to
+ * @param element   Pointer to the element to copy in
+ * @param overwrite When true, evict the oldest element on a full buffer
+ *                  instead of failing
  * @return STATUS_OK on success, STATUS_ERR_INVALID_ARG on a NULL pointer,
- *         STATUS_ERR_FULL if the buffer is full.
+ *         STATUS_ERR_FULL if the buffer is full and @p overwrite is false.
  */
-status_t ring_buffer_write(ring_buffer_t *rb, const void *element);
+status_t ring_buffer_write(ring_buffer_t *rb, const void *element, bool overwrite);
 
 /**
  * @brief Copy one element out of the buffer.
@@ -99,7 +103,7 @@ bool ring_buffer_is_empty(const ring_buffer_t *rb);
 bool ring_buffer_is_full(const ring_buffer_t *rb);
 
 /** @brief Convenience wrapper: write the lvalue @p val by address. */
-#define rb_write(rb, val) ring_buffer_write((rb), &(val))
+#define rb_write(rb, val, overwrite) ring_buffer_write((rb), &(val), (overwrite))
 /** @brief Convenience wrapper: read into the lvalue @p val by address. */
 #define rb_read(rb, val) ring_buffer_read((rb), &(val))
 
