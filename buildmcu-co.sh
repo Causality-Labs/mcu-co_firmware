@@ -16,7 +16,9 @@ usage() {
     echo "  -f <tool>    Flash firmware (tool: st, ocd)"
     echo "  -F           Format source files with clang-format"
     echo "  -s <tool>    Run static analysis (tool: clang, cpp, both)"
-    echo "  -t           Build and run the host-native unit test suite (tests/unit-tests)"
+    echo "  -t [filter]  Build and run the host-native unit test suite (tests/unit-tests)."
+    echo "                 With filter (GroupName or GroupName:TestName), run just that"
+    echo "                 group/test instead of the full suite."
     echo "  -h           Print this help message"
     exit 0
 }
@@ -91,6 +93,35 @@ cmd_test() {
     ctest --test-dir "${TEST_BUILD_DIR}" --verbose
 }
 
+cmd_test_single() {
+    local filter="$1"
+    local group="${filter%%:*}"
+    local name=""
+    if [[ "${filter}" == *:* ]]; then
+        name="${filter#*:}"
+    fi
+
+    cmake -S "${SCRIPT_DIR}/tests/unit-tests" -B "${TEST_BUILD_DIR}"
+    cmake --build "${TEST_BUILD_DIR}"
+
+    local cpputest_args=(-g "${group}")
+    if [ -n "${name}" ]; then
+        cpputest_args+=(-n "${name}")
+    fi
+
+    # A binary that doesn't contain this group runs 0 tests, which CppUTest
+    # itself treats as a failure (nonzero exit) - don't let that (rather than
+    # an actual assertion failure) abort the other binary or the script.
+    local status=0
+    "${TEST_BUILD_DIR}/unit_tests" "${cpputest_args[@]}" -v || status=$?
+    "${TEST_BUILD_DIR}/test_command_dispatcher" "${cpputest_args[@]}" -v || status=$?
+
+    if [ "${status}" -ne 0 ]; then
+        echo "One or more test binaries failed (or the filter matched nothing in either)." >&2
+        return "${status}"
+    fi
+}
+
 cmd_flash() {
     case "$1" in
         st)
@@ -133,7 +164,12 @@ while getopts "bcf:Fl:s:th" opt; do
             cmd_static_analysis "${OPTARG}"
             ;;
         t)
-            cmd_test
+            if [[ -n "${!OPTIND-}" && "${!OPTIND}" != -* ]]; then
+                cmd_test_single "${!OPTIND}"
+                OPTIND=$((OPTIND + 1))
+            else
+                cmd_test
+            fi
             ;;
         h)
             usage

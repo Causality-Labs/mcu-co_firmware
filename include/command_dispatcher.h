@@ -5,11 +5,6 @@
 #include "status.h"
 #include "frame_parser.h"
 
-typedef struct
-{
-    bool ack;
-    uint8_t state;
-} response_t;
 
 status_t dispatch_command(frame_t *frame, response_t *resp);
 

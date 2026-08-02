@@ -34,23 +34,30 @@ Frame size = `5 + LEN` bytes.
 ### Response frame
 
 ```
- SOF · OPCODE · LEN · ACK/NACK [ · STATE ] · CRC_L · CRC_H
+ SOF · LEN · ACK/NACK [ · STATE ] · CRC_L · CRC_H
 ```
 
 | Field      | Size | Notes                                                                                                   |
 |------------|------|-----------------------------------------------------------------------------------------------------------|
 | SOF        | 1    | Start-of-frame sync = `0xA5`.                                                                              |
-| OPCODE     | 1    | echoed from the command it answers.                                                                       |
 | LEN        | 1    | `0x01` for most opcodes, `0x02` for `GPIO_READ`.                                                          |
 | ACK/NACK   | 1    | `0x00` = NACK (command failed), `0x01` = ACK (command succeeded). This is the *only* success/fail signal — there is no separate NAK reason code. |
 | STATE      | 0/1  | `GPIO_READ` only: pin level, `0x00` low / `0x01` high. Omitted (LEN=1) for every other opcode. Sent as filler `0x00` when ACK/NACK is NACK. |
-| CRC16      | 2    | CRC16-CCITT, little-endian, computed over OPCODE·LEN·payload.                                              |
+| CRC16      | 2    | CRC16-CCITT, little-endian, computed over LEN and ACK/NACK[, STATE].                                       |
 
-Response frame size is `6` bytes for most commands, `7` bytes for `GPIO_READ`.
+Response frame size is `5` bytes for most commands, `6` bytes for `GPIO_READ`.
+
+No `OPCODE` field — the model is strict master-slave with one command in flight at a time
+(see top), so the host always knows which command a response answers without an echo. One
+consequence: every bare ACK (`A5 01 01 · CRC`) and every bare NACK (`A5 01 00 · CRC`) is
+byte-identical regardless of which opcode it's answering.
 
 ### CRC coverage
 
-CRC16-CCITT is computed over everything except SOF and the CRC bytes (`OPCODE`, `LEN`, `PAYLOAD`). On the wire the low byte is sent first (little-endian), e.g. CRC `0xE433` is transmitted as `33 E4`.
+CRC16-CCITT is computed over everything except SOF and the CRC bytes — `OPCODE`, `LEN`,
+`PAYLOAD` for command frames; `LEN`, `ACK/NACK`[, `STATE`] for response frames (no `OPCODE`,
+see [Response frame](#response-frame)). On the wire the low byte is sent first (little-endian),
+e.g. CRC `0xE433` is transmitted as `33 E4`.
 
 > **CRC variant:** examples here use **CCITT-FALSE** — polynomial `0x1021`, init `0xFFFF`, no reflection, final XOR `0x0000`. Firmware and host must agree bit-for-bit.
 
@@ -97,7 +104,7 @@ cmd   A5 30 03  01 00 05  AB E1
                │  │  └ PIN  = 5
                │  └ PORT = A
                └ DIR  = output
-ack   A5 30 01  01        29 2A
+ack   A5 01  01        1F 3E
 ```
 
 ## 2. `gpio set` — drive an output pin
@@ -110,7 +117,7 @@ Payload `[LEVEL, PORT, PIN]`. Example — drive PA5 high:
 
 ```
 cmd   A5 31 03  01 00 05  FA 4B
-ack   A5 31 01  01        19 1D
+ack   A5 01  01        1F 3E
 ```
 
 ## 3. `gpio get` — read an input pin
@@ -123,9 +130,9 @@ Payload `[PORT, PIN]` (no qualifier). Response is `[ACK/NACK, STATE]`, where STA
 
 ```
 cmd   A5 32 02  00 05     84 7B
-resp  A5 32 02  01 01     31 08
-               │  └ STATE    = 1 (high)
-               └ ACK/NACK = 1 (success)
+resp  A5 02  01 01     EC 81
+            │  └ STATE    = 1 (high)
+            └ ACK/NACK = 1 (success)
 ```
 
 ## 4. `gpio irq cfg` — arm or disarm an interrupt trigger
@@ -147,7 +154,7 @@ cmd   A5 34 03  03 00 05  CD 06
                │  │  └ PIN  = 5
                │  └ PORT = A
                └ EDGE = both
-ack   A5 34 01  01        E9 F6
+ack   A5 01  01        1F 3E
 ```
 
 ### STM32 EXTI constraint
@@ -167,7 +174,7 @@ without disarming the whole pin; see [open decisions](#open-decisions). Example 
 
 ```
 cmd   A5 34 03  00 00 05  9D 5F
-ack   A5 34 01  01        E9 F6
+ack   A5 01  01        1F 3E
 ```
 
 ## 5. `gpio irq bind` — attach an output action to an armed edge
@@ -210,7 +217,7 @@ cmd   A5 33 06  03 02 0D  02 00 05  92 93
                │  │  └ IN_PIN  = 13 (C13)
                │  └ IN_PORT = C
                └ EDGE_SELECT = both
-ack   A5 33 01  01        79 73
+ack   A5 01  01        1F 3E
 ```
 
 ## 6. `gpio irq unbind` — drop a bound action without disarming
@@ -228,7 +235,7 @@ Payload `[PORT, PIN]`. Example — unbind PA5:
 
 ```
 cmd   A5 35 02  00 05     A9 2A
-ack   A5 35 01  01        D9 C1
+ack   A5 01  01        1F 3E
 ```
 
 ---
@@ -243,7 +250,7 @@ another port:
 
 ```
 cmd   A5 34 03  01 00 05  AD 68
-nak   A5 34 01  00        C8 E6
+nak   A5 01  00        3E 2E
 ```
 
 `gpio irq bind` NACKs the same bare way if the edge it's targeting isn't currently armed on
@@ -253,7 +260,7 @@ an active binding (see [§5](#5-gpio-irq-bind--attach-an-output-action-to-an-arm
 
 ```
 cmd   A5 33 06  01 00 05  01 01 00  56 E3
-nak   A5 33 01  00        58 63
+nak   A5 01  00        3E 2E
 ```
 
 ---

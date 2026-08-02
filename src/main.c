@@ -8,13 +8,12 @@
 #include "frame_parser.h"
 #include "crc16.h"
 #include "command_dispatcher.h"
+#include "command_transport.h"
 
 #define MODULE_NAME "MAIN"
 
 const gpio_pin_t led                            = {.port = GPIO_PORT_A, .pin = (uint8_t)5U};
 static const uart_instance_t commands_transport = UART_INSTANCE_USART2;
-static uint8_t commands_transport_buffer[128]   = {0};
-static uart_rx_buffer_t commands_transport_rx   = {.buffer = commands_transport_buffer, .size = 128};
 
 void button_ISR(void);
 
@@ -41,15 +40,7 @@ int main(void)
         }
     }
 
-    const uart_config_t commands_transport_config = {
-        .baudrate   = UART_BAUD_115200,
-        .data_width = UART_DATA_8BIT,
-        .parity     = UART_PARITY_NONE,
-        .stop_bits  = UART_STOP_1BIT,
-        .mode       = UART_MODE_TX_RX,
-    };
-
-    if (uart_init(commands_transport, &commands_transport_config, &commands_transport_rx) != 0)
+    if (command_transport_init(commands_transport) != STATUS_OK)
     {
         for (;;)
         {
@@ -70,7 +61,7 @@ int main(void)
 
     for (;;)
     {
-        while (uart_read_byte(commands_transport, &data_byte) == STATUS_OK)
+        while (command_transport_receive(&data_byte) == STATUS_OK)
         {
 
             frame_results_t frame_status = frame_parser_feed(&frame, data_byte);
@@ -99,7 +90,9 @@ int main(void)
                     continue;
                 }
 
-                // Build return response
+                // TODO: send resp via command_transport_send_response() once
+                // frame_parser_serialize_response() exists (see
+                // tests/unit-tests/command_transport_test_list.md).
                 LOG_INFO(MODULE_NAME, "Command dispatched.");
             }
 

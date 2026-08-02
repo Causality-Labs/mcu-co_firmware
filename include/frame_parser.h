@@ -2,6 +2,7 @@
 #define FRAME_PARSER_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #define MAX_PAYLOAD 32
 #define OPCODE_IDX  0
@@ -36,6 +37,13 @@ typedef struct
     uint8_t crc_low;
     uint8_t crc_high;
 } frame_t;
+
+typedef struct
+{
+    bool ack;
+    uint8_t state;
+    bool has_state;
+} response_t;
 
 frame_results_t frame_parser_feed(frame_t *frame, uint8_t data_byte);
 

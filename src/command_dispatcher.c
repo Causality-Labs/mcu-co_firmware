@@ -28,8 +28,9 @@ status_t dispatch_command(frame_t *frame, response_t *resp)
         return STATUS_ERR_INVALID_ARG;
     }
 
-    resp->ack   = false;
-    resp->state = 0U;
+    resp->ack       = false;
+    resp->state     = 0U;
+    resp->has_state = false;
 
     switch (frame->opcode)
     {
@@ -72,8 +73,9 @@ status_t dispatch_command(frame_t *frame, response_t *resp)
             return ret;
         }
 
-        resp->ack   = true;
-        resp->state = pin_state;
+        resp->ack       = true;
+        resp->state     = pin_state;
+        resp->has_state = true;
 
         if (pin_state == true)
         {
