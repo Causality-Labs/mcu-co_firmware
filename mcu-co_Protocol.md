@@ -245,8 +245,16 @@ ack   A5 01  01        1F 3E
 A NACK (`ACK/NACK = 0x00`) only signals that the command failed — there is no reason code in
 the payload. Firmware still validates length, opcode, FSM state, port/pin/edge/level ranges,
 and EXTI-line ownership before executing a command; any of those failures produces the same
-bare NACK. Example — `gpio irq cfg` rejected because PA5's EXTI line is already owned by
-another port:
+bare NACK.
+
+> **A NACK is only sent once a frame has been fully received and its CRC verified.** Failures
+> *below* that point — a CRC mismatch, or a framing error such as `LEN > MAX_PAYLOAD` — are
+> answered with **silence**: the MCU discards the frame, resyncs on the next SOF, and sends
+> nothing. A corrupt frame can't be trusted to identify itself, so there is nothing to
+> meaningfully reply to. Hosts must therefore treat a response timeout as a real outcome and
+> cannot distinguish "frame rejected by the parser" from "MCU absent" at the protocol level.
+
+Example — `gpio irq cfg` rejected because PA5's EXTI line is already owned by another port:
 
 ```
 cmd   A5 34 03  01 00 05  AD 68
@@ -270,13 +278,13 @@ nak   A5 01  00        3E 2E
 - `bind` is a reserved pivot token in the old single-command grammar; now that `cfg`/`bind` are separate subcommands, the pivot to guard is the `irq` subcommand word itself (`cfg` vs `bind`) — reject anything else there so a typo fails loudly instead of mis-slotting arguments.
 - `off` in the edge slot of `gpio irq cfg` maps to `EDGE = 0` (disarm); reject a trailing action tail (`gpio irq cfg off A 5 high C 2 …`) since `cfg` never takes output-action args.
 - `gpio irq bind`'s edge slot never accepts `off` — dropping a binding is `gpio irq unbind` (keeps the trigger armed), disarming the whole pin is `gpio irq cfg off` (drops the binding too, as a side effect).
-- CLI and wire are both value-first. Decide whether the C SDK is value-first (`mcuco_gpio_set(ctx, level, port, pin)`, uniform with CLI/wire) or target-first (`mcuco_gpio_set(ctx, port, pin, level)`, C idiom with a reorder in the frame builder). Apply the choice uniformly.
+- CLI and wire are both value-first, and so is the SDK — `mcuco_gpio_set(ctx, level, port, pin)`, not `mcuco_gpio_set(ctx, port, pin, level)`. See [open decision #3](#open-decisions).
 
 ## Open decisions
 
 1. **CRC variant** — confirm CCITT-FALSE vs XMODEM/reflected; match firmware to this doc.
 2. **`irq bind` auto-config** — decided: **manual**. Neither `gpio irq cfg` nor `gpio irq bind` configure pin direction; the host must `gpio cfg input <in>` and `gpio cfg output <out>` first — `bind` NACKs (via the existing `is_pin_an_input()`/`is_pin_an_output()` checks) if either pin isn't already in the right mode. Rationale: auto-config can silently reconfigure a pin the host is using for something else; manual config keeps pin behavior changes explicit and host-visible.
-3. **SDK argument order** — value-first vs target-first (see CLI notes).
+3. **SDK argument order** — resolved: **value-first**, `mcuco_gpio_set(ctx, level, port, pin)`. Rationale: CLI token order and payload byte order are already value-first, so a value-first SDK makes the call, the command that produced it and the bytes on the wire all read in the same direction — one order to remember, and a frame builder that copies its arguments straight through with no reorder to get wrong. The cost is that it reads slightly against C convention, where the target usually comes first. Applied uniformly: the host-side mock SDK in `tools/mcu-co-cli/mcuco/client.py` follows it, and the C SDK must too — the two are meant to mirror each other.
 4. **No NACK reason code** — a NACK currently only says a command failed, not why (see [NACK](#nack)). Revisit if the host/CLI needs to surface a specific cause to the user rather than just "command rejected."
 5. **Rising/falling race on `both`-armed pins with different actions per edge** — moot, not just deferred: a pin can only have one active binding (see the overwrite rule in [§5](#5-gpio-irq-bind--attach-an-output-action-to-an-armed-edge)), so "different action per edge" isn't reachable through `bind` at all anymore. The `toggle` action is the intended way to get edge-agnostic behavior (e.g. LED tracking a button) without ever needing the ISR to know which edge fired. If a future need for genuinely independent rising/falling bindings comes up, this problem — and its fix (arm one direction at a time, flip `RTSR1`/`FTSR1` after each fire) — comes back with it.
 6. **Unbind is per-pin, not per-edge** — resolved: `gpio irq unbind` (`0x35`) drops whatever's bound to a pin without disarming it. It's still whole-pin, not whole-edge — since a pin has at most one active binding today (see the `both` note in [§5](#5-gpio-irq-bind--attach-an-output-action-to-an-armed-edge)), there's nothing narrower to target yet. Revisit if a pin ever gets independent rising/falling bindings.
