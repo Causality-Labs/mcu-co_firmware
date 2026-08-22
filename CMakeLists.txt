@@ -93,6 +93,7 @@ add_executable(${PROJECT_NAME}
   src/frame_parser.c
   src/logger.c
   src/command_dispatcher.c
+  src/command_transport.c
   src/gpio_controller.c
   src/gpio_irq_bindings.c
   peripherals/uart.c

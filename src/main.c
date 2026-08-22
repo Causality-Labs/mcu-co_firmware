@@ -8,13 +8,12 @@
 #include "frame_parser.h"
 #include "crc16.h"
 #include "command_dispatcher.h"
+#include "command_transport.h"
 
 #define MODULE_NAME "MAIN"
 
 const gpio_pin_t led                            = {.port = GPIO_PORT_A, .pin = (uint8_t)5U};
 static const uart_instance_t commands_transport = UART_INSTANCE_USART2;
-static uint8_t commands_transport_buffer[128]   = {0};
-static uart_rx_buffer_t commands_transport_rx   = {.buffer = commands_transport_buffer, .size = 128};
 
 void button_ISR(void);
 
@@ -41,15 +40,7 @@ int main(void)
         }
     }
 
-    const uart_config_t commands_transport_config = {
-        .baudrate   = UART_BAUD_115200,
-        .data_width = UART_DATA_8BIT,
-        .parity     = UART_PARITY_NONE,
-        .stop_bits  = UART_STOP_1BIT,
-        .mode       = UART_MODE_TX_RX,
-    };
-
-    if (uart_init(commands_transport, &commands_transport_config, &commands_transport_rx) != 0)
+    if (command_transport_init(commands_transport) != STATUS_OK)
     {
         for (;;)
         {
@@ -64,13 +55,15 @@ int main(void)
     frame_t frame     = {0};
     frame.state       = SOF;
 
-    uint8_t serialized_frame[2 + MAX_PAYLOAD] = {0};
-    uint8_t serialized_frame_buffer_size      = 2 + MAX_PAYLOAD;
-    uint16_t recv_crc                         = 0;
+    uint8_t serialized_frame[2 + RX_MAX_PAYLOAD] = {0};
+    uint8_t serialized_frame_buffer_size         = 2 + RX_MAX_PAYLOAD;
+    uint16_t recv_crc                            = 0;
+
+    uint8_t response_frame[TX_FRAME_MAX] = {0};
 
     for (;;)
     {
-        while (uart_read_byte(commands_transport, &data_byte) == STATUS_OK)
+        while (command_transport_receive(&data_byte) == STATUS_OK)
         {
 
             frame_results_t frame_status = frame_parser_feed(&frame, data_byte);
@@ -78,29 +71,63 @@ int main(void)
             {
 
                 int serialized_frame_size = frame_parser_serialize(&frame, serialized_frame, serialized_frame_buffer_size);
-                frame_parser_get_crc(&frame, &recv_crc);
+                if (serialized_frame_size < 0)
+                {
+                    LOG_ERROR(MODULE_NAME, "frame_parser_serialize() failed.");
+                    continue;
+                }
+
+                if (frame_parser_get_crc(&frame, &recv_crc) < 0)
+                {
+                    LOG_ERROR(MODULE_NAME, "frame_parser_get_crc() failed.");
+                    continue;
+                }
 
                 uint16_t crc_computed = crc16_compute(serialized_frame, (uint8_t)serialized_frame_size);
                 if (crc16_compare(crc_computed, recv_crc) != true)
                 {
-                    // Bad crc.
                     LOG_INFO(MODULE_NAME, "CRC frame error.");
                     continue;
                 }
 
-                // good crc
                 LOG_INFO(MODULE_NAME, "Valid frame recieved.");
-                response_t resp;
+
+                /* {0} leaves ack false, so this is already a valid NACK if
+                 * dispatch_command() returns before populating it. */
+                response_t resp      = {0};
                 status_t disp_status = dispatch_command(&frame, &resp);
 
                 if (disp_status != STATUS_OK)
                 {
-                    LOG_ERROR(MODULE_NAME, "dispatch_command() failed.");
+                    /* No continue: the host is waiting on a reply, and resp is
+                     * a populated NACK on every dispatch failure path. */
+                    LOG_ERROR(MODULE_NAME, "dispatch_command() failed, sending NACK.");
+                }
+
+                int response_len = frame_parser_serialize_response(&resp, response_frame, sizeof(response_frame));
+                if (response_len < 0)
+                {
+                    LOG_ERROR(MODULE_NAME, "frame_parser_serialize_response() failed.");
                     continue;
                 }
 
-                // Build return response
-                LOG_INFO(MODULE_NAME, "Command dispatched.");
+                /* CRC covers LEN onward - SOF is excluded. The RX path needs no
+                 * such offset because frame_parser_serialize() returns only the
+                 * covered bytes. */
+                uint16_t resp_crc = crc16_compute(&response_frame[TX_LEN_IDX], (uint8_t)(response_len - TX_LEN_IDX));
+
+                response_len = frame_parser_append_crc(response_frame, (uint8_t)response_len,
+                                                       (uint8_t)sizeof(response_frame), resp_crc);
+                if (response_len < 0)
+                {
+                    LOG_ERROR(MODULE_NAME, "frame_parser_append_crc() failed.");
+                    continue;
+                }
+
+                if (command_transport_send(response_frame, (uint16_t)response_len) != STATUS_OK)
+                {
+                    LOG_ERROR(MODULE_NAME, "command_transport_send() failed.");
+                }
             }
 
             if (frame_status == FRAME_ERROR)

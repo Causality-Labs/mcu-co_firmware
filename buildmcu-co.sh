@@ -16,7 +16,9 @@ usage() {
     echo "  -f <tool>    Flash firmware (tool: st, ocd)"
     echo "  -F           Format source files with clang-format"
     echo "  -s <tool>    Run static analysis (tool: clang, cpp, both)"
-    echo "  -t           Build and run the host-native unit test suite (tests/unit-tests)"
+    echo "  -t [filter]  Build and run the host-native unit test suite (tests/unit-tests)."
+    echo "                 With filter (GroupName or GroupName:TestName), run just that"
+    echo "                 group/test instead of the full suite."
     echo "  -h           Print this help message"
     exit 0
 }
@@ -91,6 +93,79 @@ cmd_test() {
     ctest --test-dir "${TEST_BUILD_DIR}" --verbose
 }
 
+# Distinct from 1 so a filter that matches nothing in one binary is not confused
+# with a real assertion failure in it.
+FILTER_MATCHED_NOTHING=2
+
+# CppUTest exits nonzero when a filter selects 0 tests, which is expected for
+# whichever binary doesn't hold the requested group. Its "ran nothing" banner is
+# the only thing separating that from a genuine failure.
+run_filtered() {
+    local binary="$1"
+    shift
+
+    local output=""
+    local result=0
+    output=$("${binary}" "$@" -v 2>&1) || result=$?
+
+    # Swallow the "test run failed" banner in this case - it reads as an error
+    # but only means the group lives in the other binary.
+    if [ "${result}" -ne 0 ] && [[ "${output}" == *"ran nothing"* ]]; then
+        echo "$(basename "${binary}"): no match, skipped."
+        return "${FILTER_MATCHED_NOTHING}"
+    fi
+
+    printf '%s\n' "${output}"
+
+    # Not "${result}": CppUTest exits with the number of failures, which could
+    # itself be FILTER_MATCHED_NOTHING.
+    if [ "${result}" -ne 0 ]; then
+        return 1
+    fi
+
+    return 0
+}
+
+cmd_test_single() {
+    local filter="$1"
+    local group="${filter%%:*}"
+    local name=""
+    if [[ "${filter}" == *:* ]]; then
+        name="${filter#*:}"
+    fi
+
+    cmake -S "${SCRIPT_DIR}/tests/unit-tests" -B "${TEST_BUILD_DIR}"
+    cmake --build "${TEST_BUILD_DIR}"
+
+    local cpputest_args=(-g "${group}")
+    if [ -n "${name}" ]; then
+        cpputest_args+=(-n "${name}")
+    fi
+
+    local failed=0
+    local matched=0
+
+    for binary in unit_tests test_command_dispatcher; do
+        local result=0
+        run_filtered "${TEST_BUILD_DIR}/${binary}" "${cpputest_args[@]}" || result=$?
+        case "${result}" in
+            0) matched=1 ;;
+            "${FILTER_MATCHED_NOTHING}") ;;
+            *) failed=1 ;;
+        esac
+    done
+
+    if [ "${failed}" -ne 0 ]; then
+        echo "Test failures in '${filter}'." >&2
+        return 1
+    fi
+
+    if [ "${matched}" -eq 0 ]; then
+        echo "No tests matched '${filter}' in any test binary." >&2
+        return 1
+    fi
+}
+
 cmd_flash() {
     case "$1" in
         st)
@@ -133,7 +208,12 @@ while getopts "bcf:Fl:s:th" opt; do
             cmd_static_analysis "${OPTARG}"
             ;;
         t)
-            cmd_test
+            if [[ -n "${!OPTIND-}" && "${!OPTIND}" != -* ]]; then
+                cmd_test_single "${!OPTIND}"
+                OPTIND=$((OPTIND + 1))
+            else
+                cmd_test
+            fi
             ;;
         h)
             usage

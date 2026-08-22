@@ -34,23 +34,30 @@ Frame size = `5 + LEN` bytes.
 ### Response frame
 
 ```
- SOF · OPCODE · LEN · ACK/NACK [ · STATE ] · CRC_L · CRC_H
+ SOF · LEN · ACK/NACK [ · STATE ] · CRC_L · CRC_H
 ```
 
 | Field      | Size | Notes                                                                                                   |
 |------------|------|-----------------------------------------------------------------------------------------------------------|
 | SOF        | 1    | Start-of-frame sync = `0xA5`.                                                                              |
-| OPCODE     | 1    | echoed from the command it answers.                                                                       |
 | LEN        | 1    | `0x01` for most opcodes, `0x02` for `GPIO_READ`.                                                          |
 | ACK/NACK   | 1    | `0x00` = NACK (command failed), `0x01` = ACK (command succeeded). This is the *only* success/fail signal — there is no separate NAK reason code. |
 | STATE      | 0/1  | `GPIO_READ` only: pin level, `0x00` low / `0x01` high. Omitted (LEN=1) for every other opcode. Sent as filler `0x00` when ACK/NACK is NACK. |
-| CRC16      | 2    | CRC16-CCITT, little-endian, computed over OPCODE·LEN·payload.                                              |
+| CRC16      | 2    | CRC16-CCITT, little-endian, computed over LEN and ACK/NACK[, STATE].                                       |
 
-Response frame size is `6` bytes for most commands, `7` bytes for `GPIO_READ`.
+Response frame size is `5` bytes for most commands, `6` bytes for `GPIO_READ`.
+
+No `OPCODE` field — the model is strict master-slave with one command in flight at a time
+(see top), so the host always knows which command a response answers without an echo. One
+consequence: every bare ACK (`A5 01 01 · CRC`) and every bare NACK (`A5 01 00 · CRC`) is
+byte-identical regardless of which opcode it's answering.
 
 ### CRC coverage
 
-CRC16-CCITT is computed over everything except SOF and the CRC bytes (`OPCODE`, `LEN`, `PAYLOAD`). On the wire the low byte is sent first (little-endian), e.g. CRC `0xE433` is transmitted as `33 E4`.
+CRC16-CCITT is computed over everything except SOF and the CRC bytes — `OPCODE`, `LEN`,
+`PAYLOAD` for command frames; `LEN`, `ACK/NACK`[, `STATE`] for response frames (no `OPCODE`,
+see [Response frame](#response-frame)). On the wire the low byte is sent first (little-endian),
+e.g. CRC `0xE433` is transmitted as `33 E4`.
 
 > **CRC variant:** examples here use **CCITT-FALSE** — polynomial `0x1021`, init `0xFFFF`, no reflection, final XOR `0x0000`. Firmware and host must agree bit-for-bit.
 
@@ -97,7 +104,7 @@ cmd   A5 30 03  01 00 05  AB E1
                │  │  └ PIN  = 5
                │  └ PORT = A
                └ DIR  = output
-ack   A5 30 01  01        29 2A
+ack   A5 01  01        1F 3E
 ```
 
 ## 2. `gpio set` — drive an output pin
@@ -110,7 +117,7 @@ Payload `[LEVEL, PORT, PIN]`. Example — drive PA5 high:
 
 ```
 cmd   A5 31 03  01 00 05  FA 4B
-ack   A5 31 01  01        19 1D
+ack   A5 01  01        1F 3E
 ```
 
 ## 3. `gpio get` — read an input pin
@@ -123,9 +130,9 @@ Payload `[PORT, PIN]` (no qualifier). Response is `[ACK/NACK, STATE]`, where STA
 
 ```
 cmd   A5 32 02  00 05     84 7B
-resp  A5 32 02  01 01     31 08
-               │  └ STATE    = 1 (high)
-               └ ACK/NACK = 1 (success)
+resp  A5 02  01 01     EC 81
+            │  └ STATE    = 1 (high)
+            └ ACK/NACK = 1 (success)
 ```
 
 ## 4. `gpio irq cfg` — arm or disarm an interrupt trigger
@@ -147,7 +154,7 @@ cmd   A5 34 03  03 00 05  CD 06
                │  │  └ PIN  = 5
                │  └ PORT = A
                └ EDGE = both
-ack   A5 34 01  01        E9 F6
+ack   A5 01  01        1F 3E
 ```
 
 ### STM32 EXTI constraint
@@ -167,7 +174,7 @@ without disarming the whole pin; see [open decisions](#open-decisions). Example 
 
 ```
 cmd   A5 34 03  00 00 05  9D 5F
-ack   A5 34 01  01        E9 F6
+ack   A5 01  01        1F 3E
 ```
 
 ## 5. `gpio irq bind` — attach an output action to an armed edge
@@ -210,7 +217,7 @@ cmd   A5 33 06  03 02 0D  02 00 05  92 93
                │  │  └ IN_PIN  = 13 (C13)
                │  └ IN_PORT = C
                └ EDGE_SELECT = both
-ack   A5 33 01  01        79 73
+ack   A5 01  01        1F 3E
 ```
 
 ## 6. `gpio irq unbind` — drop a bound action without disarming
@@ -228,7 +235,7 @@ Payload `[PORT, PIN]`. Example — unbind PA5:
 
 ```
 cmd   A5 35 02  00 05     A9 2A
-ack   A5 35 01  01        D9 C1
+ack   A5 01  01        1F 3E
 ```
 
 ---
@@ -238,12 +245,20 @@ ack   A5 35 01  01        D9 C1
 A NACK (`ACK/NACK = 0x00`) only signals that the command failed — there is no reason code in
 the payload. Firmware still validates length, opcode, FSM state, port/pin/edge/level ranges,
 and EXTI-line ownership before executing a command; any of those failures produces the same
-bare NACK. Example — `gpio irq cfg` rejected because PA5's EXTI line is already owned by
-another port:
+bare NACK.
+
+> **A NACK is only sent once a frame has been fully received and its CRC verified.** Failures
+> *below* that point — a CRC mismatch, or a framing error such as `LEN > MAX_PAYLOAD` — are
+> answered with **silence**: the MCU discards the frame, resyncs on the next SOF, and sends
+> nothing. A corrupt frame can't be trusted to identify itself, so there is nothing to
+> meaningfully reply to. Hosts must therefore treat a response timeout as a real outcome and
+> cannot distinguish "frame rejected by the parser" from "MCU absent" at the protocol level.
+
+Example — `gpio irq cfg` rejected because PA5's EXTI line is already owned by another port:
 
 ```
 cmd   A5 34 03  01 00 05  AD 68
-nak   A5 34 01  00        C8 E6
+nak   A5 01  00        3E 2E
 ```
 
 `gpio irq bind` NACKs the same bare way if the edge it's targeting isn't currently armed on
@@ -253,7 +268,7 @@ an active binding (see [§5](#5-gpio-irq-bind--attach-an-output-action-to-an-arm
 
 ```
 cmd   A5 33 06  01 00 05  01 01 00  56 E3
-nak   A5 33 01  00        58 63
+nak   A5 01  00        3E 2E
 ```
 
 ---
@@ -263,13 +278,13 @@ nak   A5 33 01  00        58 63
 - `bind` is a reserved pivot token in the old single-command grammar; now that `cfg`/`bind` are separate subcommands, the pivot to guard is the `irq` subcommand word itself (`cfg` vs `bind`) — reject anything else there so a typo fails loudly instead of mis-slotting arguments.
 - `off` in the edge slot of `gpio irq cfg` maps to `EDGE = 0` (disarm); reject a trailing action tail (`gpio irq cfg off A 5 high C 2 …`) since `cfg` never takes output-action args.
 - `gpio irq bind`'s edge slot never accepts `off` — dropping a binding is `gpio irq unbind` (keeps the trigger armed), disarming the whole pin is `gpio irq cfg off` (drops the binding too, as a side effect).
-- CLI and wire are both value-first. Decide whether the C SDK is value-first (`mcuco_gpio_set(ctx, level, port, pin)`, uniform with CLI/wire) or target-first (`mcuco_gpio_set(ctx, port, pin, level)`, C idiom with a reorder in the frame builder). Apply the choice uniformly.
+- CLI and wire are both value-first, and so is the SDK — `mcuco_gpio_set(ctx, level, port, pin)`, not `mcuco_gpio_set(ctx, port, pin, level)`. See [open decision #3](#open-decisions).
 
 ## Open decisions
 
 1. **CRC variant** — confirm CCITT-FALSE vs XMODEM/reflected; match firmware to this doc.
 2. **`irq bind` auto-config** — decided: **manual**. Neither `gpio irq cfg` nor `gpio irq bind` configure pin direction; the host must `gpio cfg input <in>` and `gpio cfg output <out>` first — `bind` NACKs (via the existing `is_pin_an_input()`/`is_pin_an_output()` checks) if either pin isn't already in the right mode. Rationale: auto-config can silently reconfigure a pin the host is using for something else; manual config keeps pin behavior changes explicit and host-visible.
-3. **SDK argument order** — value-first vs target-first (see CLI notes).
+3. **SDK argument order** — resolved: **value-first**, `mcuco_gpio_set(ctx, level, port, pin)`. Rationale: CLI token order and payload byte order are already value-first, so a value-first SDK makes the call, the command that produced it and the bytes on the wire all read in the same direction — one order to remember, and a frame builder that copies its arguments straight through with no reorder to get wrong. The cost is that it reads slightly against C convention, where the target usually comes first. Applied uniformly: the host-side mock SDK in `tools/mcu-co-cli/mcuco/client.py` follows it, and the C SDK must too — the two are meant to mirror each other.
 4. **No NACK reason code** — a NACK currently only says a command failed, not why (see [NACK](#nack)). Revisit if the host/CLI needs to surface a specific cause to the user rather than just "command rejected."
 5. **Rising/falling race on `both`-armed pins with different actions per edge** — moot, not just deferred: a pin can only have one active binding (see the overwrite rule in [§5](#5-gpio-irq-bind--attach-an-output-action-to-an-armed-edge)), so "different action per edge" isn't reachable through `bind` at all anymore. The `toggle` action is the intended way to get edge-agnostic behavior (e.g. LED tracking a button) without ever needing the ISR to know which edge fired. If a future need for genuinely independent rising/falling bindings comes up, this problem — and its fix (arm one direction at a time, flip `RTSR1`/`FTSR1` after each fire) — comes back with it.
 6. **Unbind is per-pin, not per-edge** — resolved: `gpio irq unbind` (`0x35`) drops whatever's bound to a pin without disarming it. It's still whole-pin, not whole-edge — since a pin has at most one active binding today (see the `both` note in [§5](#5-gpio-irq-bind--attach-an-output-action-to-an-armed-edge)), there's nothing narrower to target yet. Revisit if a pin ever gets independent rising/falling bindings.

@@ -5,66 +5,71 @@ UART (USART2), so you can pick a frame type and watch how the MCU reacts.
 Open the log UART (USART1) yourself in another terminal / serial monitor
 to see how the MCU responded to each frame.
 
-Wire format (see mcu-co_Protocol.md):
-
-    SOF . OPCODE . LEN . PAYLOAD . CRC_L . CRC_H
-
-CRC16 is CCITT-FALSE (poly 0x1021, init 0xFFFF, no reflect, no xorout),
-computed over OPCODE, LEN and PAYLOAD only (not SOF, not the CRC bytes).
+Frame encoding lives in tools/mcu-co-cli/mcuco/protocol.py and the transport in
+mcuco/link.py — this script is firmware bring-up, so it keeps the deliberately
+malformed frames (bad CRC, oversized LEN) that exercise the parser's error paths
+rather than the device. Those frames draw no reply at all: the firmware discards
+a bad frame silently instead of NACKing it, so a timeout is the pass condition.
 """
 
-import serial
+import sys
 import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools" / "mcu-co-cli"))
+
+from mcuco.client import McuCo  # noqa: E402
+from mcuco.link import LinkTimeout, McuCoLink  # noqa: E402
+from mcuco.protocol import (  # noqa: E402
+    SOF,
+    Action,
+    Dir,
+    Edge,
+    Level,
+    Opcode,
+    Port,
+    ProtocolError,
+    build_command,
+    crc16_ccitt_false,
+)
 
 # --- Adjust this to match your USB-serial adapter wired to USART2 ---------
 CMD_PORT = '/dev/ttyACM0'
 BAUDRATE = 115200
 
-SOF = 0xA5
-MAX_PAYLOAD = 32  # from frame_parser.h
-
-# Opcode + payload used for every frame type below: "gpio cfg output PA5".
-OPCODE  = 0x30  # GPIO_CFG
-PAYLOAD = bytes([0x01, 0x00, 0x05])  # [DIR=output, PORT=A, PIN=5]
-
-GPIO_WRITE_OPCODE    = 0x31  # GPIO_WRITE
-GPIO_READ_OPCODE     = 0x32  # GPIO_READ
-GPIO_IRQ_BIND_OPCODE = 0x33  # GPIO_IRQ_BIND
-GPIO_IRQ_CFG_OPCODE  = 0x34  # GPIO_IRQ_CFG
-
-EDGE_OFF     = 0x00
-EDGE_RISING  = 0x01
-EDGE_FALLING = 0x02
-EDGE_BOTH    = 0x03
-
-ACTION_LOW    = 0x00
-ACTION_HIGH   = 0x01
-ACTION_TOGGLE = 0x02
+LED_PIN = 5     # PA5, Nucleo user LED
+BUTTON_PIN = 13  # PC13, Nucleo B1 user button
 
 
-def crc16_ccitt_false(data: bytes) -> int:
-    """Same algorithm as crc16_compute() in common/crc16.c."""
-    crc = 0xFFFF
-    for byte in data:
-        crc ^= byte << 8
-        for _ in range(8):
-            if crc & 0x8000:
-                crc = ((crc << 1) ^ 0x1021) & 0xFFFF
-            else:
-                crc = (crc << 1) & 0xFFFF
-    return crc
+def send(link, name: str, frame: bytes) -> None:
+    """Send one frame and report what came back, if anything."""
+    print(f"Sent [{name}]: {frame.hex(' ')}")
+    try:
+        print(f"  <- {link.send(frame)}")
+    except LinkTimeout as exc:
+        print(f"  <- no response ({exc})")
+    except ProtocolError as exc:
+        print(f"  <- malformed response ({exc})")
 
 
-def build_valid_frame() -> bytes:
-    """Well-formed frame with a correct CRC. The MCU should accept it."""
-    body = bytes([OPCODE, len(PAYLOAD)]) + PAYLOAD
-    crc = crc16_ccitt_false(body)
-    return bytes([SOF]) + body + bytes([crc & 0xFF, (crc >> 8) & 0xFF])
+def build_cfg_output_pa5() -> bytes:
+    """gpio cfg output A 5 - configure PA5 (Nucleo LED) as an output."""
+    return build_command(Opcode.GPIO_CFG, bytes([Dir.OUTPUT, Port.A, LED_PIN]))
+
+
+def build_cfg_input_pc13() -> bytes:
+    """gpio cfg input C 13 - configure PC13 (Nucleo B1 button) as an input."""
+    return build_command(Opcode.GPIO_CFG, bytes([Dir.INPUT, Port.C, BUTTON_PIN]))
+
+
+def build_gpio_read_pc13() -> bytes:
+    """gpio get C 13 - read the current level of PC13."""
+    return build_command(Opcode.GPIO_READ, bytes([Port.C, BUTTON_PIN]))
 
 
 def build_valid_frame_wrong_crc() -> bytes:
-    """Same well-formed frame, but with the CRC bytes deliberately corrupted."""
-    frame = bytearray(build_valid_frame())
+    """Well-formed frame with the CRC bytes deliberately corrupted."""
+    frame = bytearray(build_cfg_output_pa5())
     frame[-1] ^= 0x01  # flip a bit in CRC_HIGH
     return bytes(frame)
 
@@ -74,8 +79,12 @@ def build_invalid_frame() -> bytes:
     LEN set beyond MAX_PAYLOAD (32). frame_parser_feed() rejects this as soon
     as it reads the LEN byte (FRAME_ERROR) and resyncs on the next SOF - it
     never even looks at the payload or CRC bytes that follow.
+
+    Built by hand rather than through build_command(), which derives LEN from
+    the payload and so cannot express this mismatch.
     """
-    body = bytes([OPCODE, 0xFF]) + PAYLOAD
+    payload = bytes([Dir.OUTPUT, Port.A, LED_PIN])
+    body = bytes([Opcode.GPIO_CFG, 0xFF]) + payload
     crc = crc16_ccitt_false(body)
     return bytes([SOF]) + body + bytes([crc & 0xFF, (crc >> 8) & 0xFF])
 
@@ -87,48 +96,18 @@ def build_invalid_frame_wrong_crc() -> bytes:
     return bytes(frame)
 
 
-def build_gpio_write_pa5(level: int) -> bytes:
-    """gpio set high|low A 5 - drive PA5 (Nucleo LED) to LEVEL (0=low, 1=high)."""
-    payload = bytes([level, 0x00, 0x05])  # [LEVEL, PORT=A, PIN=5]
-    body = bytes([GPIO_WRITE_OPCODE, len(payload)]) + payload
-    crc = crc16_ccitt_false(body)
-    return bytes([SOF]) + body + bytes([crc & 0xFF, (crc >> 8) & 0xFF])
+def step(name: str, call) -> None:
+    """Run one client call and report what came back, if anything."""
+    print(f"Sent [{name}]")
+    try:
+        print(f"  <- {call()}")
+    except LinkTimeout as exc:
+        print(f"  <- no response ({exc})")
+    except ProtocolError as exc:
+        print(f"  <- malformed response ({exc})")
 
 
-def build_gpio_cfg_input_pc13() -> bytes:
-    """gpio cfg input C 13 - configure PC13 (Nucleo B1 user button) as an input."""
-    payload = bytes([0x00, 0x02, 0x0D])  # [DIR=input, PORT=C, PIN=13]
-    body = bytes([OPCODE, len(payload)]) + payload
-    crc = crc16_ccitt_false(body)
-    return bytes([SOF]) + body + bytes([crc & 0xFF, (crc >> 8) & 0xFF])
-
-
-def build_gpio_read_pc13() -> bytes:
-    """gpio get C 13 - read the current level of PC13 (Nucleo B1 user button)."""
-    payload = bytes([0x02, 0x0D])  # [PORT=C, PIN=13]
-    body = bytes([GPIO_READ_OPCODE, len(payload)]) + payload
-    crc = crc16_ccitt_false(body)
-    return bytes([SOF]) + body + bytes([crc & 0xFF, (crc >> 8) & 0xFF])
-
-
-def build_gpio_irq_cfg(edge: int, port: int, pin: int) -> bytes:
-    """gpio irq cfg <edge> <port> <pin> - arm (or disarm, edge=EDGE_OFF) an EXTI trigger."""
-    payload = bytes([edge, port, pin])
-    body = bytes([GPIO_IRQ_CFG_OPCODE, len(payload)]) + payload
-    crc = crc16_ccitt_false(body)
-    return bytes([SOF]) + body + bytes([crc & 0xFF, (crc >> 8) & 0xFF])
-
-
-def build_gpio_irq_bind(edge_select: int, in_port: int, in_pin: int,
-                         action: int, out_port: int, out_pin: int) -> bytes:
-    """gpio irq bind <edge> <in_port> <in_pin> <action> <out_port> <out_pin>."""
-    payload = bytes([edge_select, in_port, in_pin, action, out_port, out_pin])
-    body = bytes([GPIO_IRQ_BIND_OPCODE, len(payload)]) + payload
-    crc = crc16_ccitt_false(body)
-    return bytes([SOF]) + body + bytes([crc & 0xFF, (crc >> 8) & 0xFF])
-
-
-def run_irq_bind_demo(cmd_ser, step_delay_s: float = 0.3):
+def run_irq_bind_demo(mcu, step_delay_s: float = 0.3):
     """
     Wires the Nucleo B1 button (PC13) to toggle the LED (PA5) entirely on the
     MCU: cfg PC13 as input, PA5 as output, set PA5 low as a known starting
@@ -139,50 +118,50 @@ def run_irq_bind_demo(cmd_ser, step_delay_s: float = 0.3):
     log UART, to confirm.
     """
     steps = [
-        ("gpio cfg input C 13", build_gpio_cfg_input_pc13()),
-        ("gpio cfg output A 5", build_valid_frame()),
-        ("gpio set low A 5", build_gpio_write_pa5(0)),
-        ("gpio irq cfg both C 13", build_gpio_irq_cfg(EDGE_BOTH, 0x02, 0x0D)),
+        ("gpio cfg input C 13",
+         lambda: mcu.gpio_cfg(Dir.INPUT, Port.C, BUTTON_PIN)),
+        ("gpio cfg output A 5",
+         lambda: mcu.gpio_cfg(Dir.OUTPUT, Port.A, LED_PIN)),
+        ("gpio set low A 5",
+         lambda: mcu.gpio_set(Level.LOW, Port.A, LED_PIN)),
+        ("gpio irq cfg both C 13",
+         lambda: mcu.gpio_irq_cfg(Edge.BOTH, Port.C, BUTTON_PIN)),
         ("gpio irq bind both C 13 toggle A 5",
-         build_gpio_irq_bind(EDGE_BOTH, 0x02, 0x0D, ACTION_TOGGLE, 0x00, 0x05)),
+         lambda: mcu.gpio_irq_bind(Edge.BOTH, Port.C, BUTTON_PIN, Action.TOGGLE, Port.A, LED_PIN)),
     ]
 
-    for name, frame in steps:
-        cmd_ser.write(frame)
-        print(f"Sent [{name}]: {frame.hex(' ')}")
+    for name, call in steps:
+        step(name, call)
         time.sleep(step_delay_s)
 
 
-def run_blink_led_test(cmd_ser, toggle_count: int = 20, period_s: float = 0.5):
+def run_blink_led_test(mcu, toggle_count: int = 20, period_s: float = 0.5):
     """
     Configure PA5 (the Nucleo board's LED pin) as an output, then drive it
     high/low alternately every `period_s` seconds, `toggle_count` times.
     Watch the LED, or the log UART (USART1), to confirm each toggle. Ctrl+C
     stops early.
     """
-    cfg_frame = build_valid_frame()  # gpio cfg output PA5
-    cmd_ser.write(cfg_frame)
-    print(f"Sent [gpio cfg output PA5]: {cfg_frame.hex(' ')}")
+    step("gpio cfg output A 5", lambda: mcu.gpio_cfg(Dir.OUTPUT, Port.A, LED_PIN))
     time.sleep(period_s)
 
-    level = 1
+    level = Level.HIGH
     try:
         for _ in range(toggle_count):
-            frame = build_gpio_write_pa5(level)
-            cmd_ser.write(frame)
-            print(f"Sent [gpio set {'high' if level else 'low'} PA5]: {frame.hex(' ')}")
-            level ^= 1
+            step(f"gpio set {'high' if level else 'low'} A 5",
+                 lambda lvl=level: mcu.gpio_set(lvl, Port.A, LED_PIN))
+            level = Level.LOW if level else Level.HIGH
             time.sleep(period_s)
     except KeyboardInterrupt:
         print("\nBlink test stopped early.")
 
 
 MENU_OPTIONS = {
-    '1': ("Valid frame", build_valid_frame),
+    '1': ("Valid frame", build_cfg_output_pa5),
     '2': ("Valid frame, wrong CRC", build_valid_frame_wrong_crc),
     '3': ("Invalid frame (LEN > MAX_PAYLOAD)", build_invalid_frame),
     '4': ("Invalid frame, wrong CRC", build_invalid_frame_wrong_crc),
-    '6': ("Configure PC13 as input (Nucleo B1 button)", build_gpio_cfg_input_pc13),
+    '6': ("Configure PC13 as input (Nucleo B1 button)", build_cfg_input_pc13),
     '7': ("Read PC13 state (Nucleo B1 button)", build_gpio_read_pc13),
 }
 
@@ -202,8 +181,8 @@ def print_menu():
 
 
 def main():
-    with serial.Serial(CMD_PORT, BAUDRATE, timeout=1.0) as cmd_ser:
-        time.sleep(0.1)
+    with McuCoLink(CMD_PORT, BAUDRATE, timeout=1.0) as link:
+        mcu = McuCo(link)
 
         while True:
             print_menu()
@@ -215,15 +194,13 @@ def main():
             option = MENU_OPTIONS.get(choice)
             if option is not None:
                 name, builder = option
-                frame = builder()
-                cmd_ser.write(frame)
-                print(f"Sent [{name}]: {frame.hex(' ')}")
+                send(link, name, builder())
                 continue
 
             action = ACTIONS.get(choice)
             if action is not None:
                 _name, action_fn = action
-                action_fn(cmd_ser)
+                action_fn(mcu)
                 continue
 
             print("Not a valid choice, try again.")

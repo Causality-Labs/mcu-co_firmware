@@ -82,6 +82,19 @@ TEST(CommandDispatcher, DispatchRoutesGpioReadOpcodeAndSetsRespState)
     LONGS_EQUAL(GPIO_CONTROLLER_CALL_READ, GpioControllerSpy_GetLastCall());
     CHECK_TRUE(resp.ack);
     LONGS_EQUAL(true, resp.state);
+    CHECK_TRUE(resp.has_state);
+}
+
+// Opcodes other than GPIO_READ carry no meaningful state, so has_state must
+// stay false even on a successful ack.
+TEST(CommandDispatcher, DispatchLeavesHasStateFalseForNonReadOpcodes)
+{
+    frame.opcode = OPCODE_GPIO_CFG;
+    frame.length = 3;
+
+    LONGS_EQUAL(STATUS_OK, dispatch_command(&frame, &resp));
+    CHECK_TRUE(resp.ack);
+    CHECK_FALSE(resp.has_state);
 }
 
 // GPIO_IRQ_BIND (0x33) should route to gpio_controller_irq_bind().

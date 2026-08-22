@@ -56,6 +56,64 @@ build and run with the system `gcc`/`g++`, not `arm-none-eabi-gcc`.
   contract (NULL/zero/invalid-arg rejection) plus one happy-path test, over
   exhaustive coverage of every internal field or edge case.
 
+### TDD workflow for new modules
+
+When building a new module test-first (as opposed to retrofitting tests onto
+existing code), follow *Test-Driven Development for Embedded C*'s cycle:
+
+1. **Write a test list before any test code.** A plain-language checklist of
+   scenarios per function, saved as `tests/unit-tests/<module>_test_list.md`
+   (see `command_transport_test_list.md` for the shape). Not a spec — cross
+   items off, or add new ones, as work proceeds. Flag any open design
+   question directly in the list rather than guessing; resolve it in
+   discussion before writing tests against it.
+2. **One test at a time, red then green.** Write exactly one failing test,
+   build and confirm it fails for the expected reason (compile error, link
+   error, or assertion failure — not just "some" error), then write the
+   *minimal* implementation to pass that one test — not code that
+   anticipates tests not yet written. Confirm green before moving on.
+3. **Default to single-step pacing.** Stop after each individual step (write
+   test / confirm red / write implementation / confirm green) and wait for
+   confirmation rather than chaining the whole cycle unprompted in one pass —
+   even if a prior message said "start on X," that authorizes one step, not
+   the rest of the list. The user may explicitly grant broader autonomy
+   ("make the rest of the module with this approach") to proceed through
+   remaining list items without pausing at each one; that grant doesn't
+   carry over to the next module or session by default.
+4. **Extending a fake is its own step.** If a test needs more from a spy
+   (`tests/unit-tests/fakes/`) than it currently exposes, add that capability
+   first, confirm it doesn't break existing tests, *then* write the new test
+   against it — don't bundle fake changes into the same step as the test
+   that needs them.
+5. **Interface/protocol changes get discussed, not assumed.** If implementing
+   a test reveals a real gap or ambiguity in a locked-in interface or wire
+   protocol (e.g. a struct field needed that doesn't exist yet), stop and
+   raise it rather than silently extending the design — these are
+   collaborative decisions, and "locked in" interfaces have been revisited
+   more than once when a test exposed a real gap.
+
+## Comments — do not over-comment
+
+Code should be self-documenting. Prefer a clear name or a restructured
+expression over a comment explaining an unclear one. Do **not** narrate what
+the code plainly says (`/* increment the index */`, a comment above every
+field, a header block on every trivial function).
+
+Write a comment only when the code genuinely can't carry the meaning:
+
+- **Why, not what** — a non-obvious rationale, a constraint from the hardware
+  or protocol, or the reason an obvious-looking alternative is wrong.
+  E.g. the re-init guard in `command_transport_init()` documents that
+  `uart_init()` only guards *per-instance*, which is not visible at the call
+  site.
+- **Doxygen (`@brief`/`@param`/`@return`) on public header declarations** —
+  these are the module's contract and stay. The rule above applies to
+  implementation comments in `.c` files.
+- **The one-line comment above each `TEST(...)`** required by the unit-test
+  convention above — that convention wins for test files.
+
+If a comment restates the line below it, delete the comment.
+
 ## Compliance — this constrains how you write code
 
 Target is **CERT-C** (enforced by clang-tidy `cert-*` as errors) plus cppcheck

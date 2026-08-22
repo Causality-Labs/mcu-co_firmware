@@ -50,6 +50,7 @@ add_executable(unit_tests
   test_gpio_controller.cpp
   test_gpio_irq_bindings.cpp
   test_logger.cpp
+  test_command_transport.cpp
 
   ${FIRMWARE_ROOT}/data_structures/ring-buffer.c
   ${FIRMWARE_ROOT}/common/status.c
@@ -61,6 +62,7 @@ add_executable(unit_tests
   fakes/gpio_spy.c
 
   ${FIRMWARE_ROOT}/src/logger.c
+  ${FIRMWARE_ROOT}/src/command_transport.c
   fakes/uart_spy.c
 )
 

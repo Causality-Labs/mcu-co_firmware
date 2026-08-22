@@ -2,11 +2,19 @@
 #define FRAME_PARSER_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
-#define MAX_PAYLOAD 32
-#define OPCODE_IDX  0
-#define LENGTH_IDX  1
-#define PAYLOAD_IDX 2
+#define RX_MAX_PAYLOAD 32
+#define RX_OPCODE_IDX  0
+#define RX_LENGTH_IDX  1
+#define RX_PAYLOAD_IDX 2
+
+#define TX_SOF_IDX   0
+#define TX_LEN_IDX   1
+#define TX_ACK_IDX   2
+#define TX_STATE_IDX 3
+
+#define TX_FRAME_MAX 6 /* SOF + LEN + ACK + STATE + CRC_L + CRC_H */
 
 typedef enum
 {
@@ -31,15 +39,26 @@ typedef struct
     frame_state_t state;
     uint8_t opcode;
     uint8_t length;
-    uint8_t payload[MAX_PAYLOAD];
+    uint8_t payload[RX_MAX_PAYLOAD];
     uint8_t payload_idx;
     uint8_t crc_low;
     uint8_t crc_high;
 } frame_t;
 
+typedef struct
+{
+    bool ack;
+    uint8_t state;
+    bool has_state;
+} response_t;
+
 frame_results_t frame_parser_feed(frame_t *frame, uint8_t data_byte);
 
 int frame_parser_serialize(frame_t *frame, uint8_t *serialized_frame_buffer, uint8_t serialized_frame_size);
+
+int frame_parser_serialize_response(response_t *response, uint8_t *serialized_response, uint8_t serialized_response_size);
+
+int frame_parser_append_crc(uint8_t *serialized_frame_buffer, uint8_t current_length, uint8_t buffer_size, uint16_t crc);
 
 int frame_parser_get_crc(frame_t *frame, uint16_t *crc);
 
