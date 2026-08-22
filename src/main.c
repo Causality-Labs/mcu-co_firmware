@@ -74,12 +74,10 @@ int main(void)
                 uint16_t crc_computed = crc16_compute(serialized_frame, (uint8_t)serialized_frame_size);
                 if (crc16_compare(crc_computed, recv_crc) != true)
                 {
-                    // Bad crc.
                     LOG_INFO(MODULE_NAME, "CRC frame error.");
                     continue;
                 }
 
-                // good crc
                 LOG_INFO(MODULE_NAME, "Valid frame recieved.");
                 response_t resp;
                 status_t disp_status = dispatch_command(&frame, &resp);
@@ -90,7 +88,7 @@ int main(void)
                     continue;
                 }
 
-                // TODO: send resp via command_transport_send_response() once
+                // TODO: send resp via command_transport_send() once
                 // frame_parser_serialize_response() exists (see
                 // tests/unit-tests/command_transport_test_list.md).
                 LOG_INFO(MODULE_NAME, "Command dispatched.");

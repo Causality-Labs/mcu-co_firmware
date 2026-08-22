@@ -308,10 +308,10 @@ status_t gpio_init_interrupt(const gpio_pin_t *gpio, const gpio_irq_config_t *co
     SYSCFG->EXTICR[exticr_idx] &= ~(0xFU << exticr_shift);
     SYSCFG->EXTICR[exticr_idx] |= (port_idx << exticr_shift);
 
-    /* Set IMR1 */
     EXTI->IMR1 |= (0x1U << gpio->pin);
 
-    /* Set RTSR1/FTSR1 */
+    /* Clear both edges first so reconfiguring a pin can't leave the previous
+     * trigger direction armed alongside the new one. */
     EXTI->RTSR1 &= ~(1U << gpio->pin);
     EXTI->FTSR1 &= ~(1U << gpio->pin);
 
@@ -387,8 +387,6 @@ status_t gpio_set_af(const gpio_pin_t *gpio, gpio_af_t af)
     return STATUS_OK;
 }
 
-/* Check if an interrupt is pending,
-run it and then clear the interrupt.*/
 void EXTI0_IRQHandler(void)
 {
     if (!(EXTI->PR1 & ((1U << 0))))

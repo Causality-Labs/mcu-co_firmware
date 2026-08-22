@@ -15,6 +15,14 @@ static bool initialized = false;
 
 status_t command_transport_init(uart_instance_t instance)
 {
+    /* uart_init() only guards per-instance, so without this a re-init on a
+     * different instance would succeed and orphan the previous one - clock,
+     * GPIO and RXNE IRQ left enabled with nothing draining its ring buffer. */
+    if (initialized)
+    {
+        return STATUS_ERR_BUSY;
+    }
+
     const uart_config_t config = {
         .baudrate   = UART_BAUD_115200,
         .data_width = UART_DATA_8BIT,
@@ -63,7 +71,7 @@ status_t command_transport_receive(uint8_t *data)
     return uart_read_byte(transport_instance, data);
 }
 
-status_t command_transport_send_response(const uint8_t *frame, uint16_t length)
+status_t command_transport_send(const uint8_t *frame, uint16_t length)
 {
     if (!initialized)
     {

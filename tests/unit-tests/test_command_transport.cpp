@@ -30,6 +30,18 @@ TEST(CommandTransport, InitPropagatesUartInitFailure)
     LONGS_EQUAL(STATUS_ERR_INVALID_ARG, command_transport_init(UART_INSTANCE_USART2));
 }
 
+// init() should reject a second init while already initialised, without touching the
+// UART. uart_init() only guards per-instance, so re-initialising on a different
+// instance would otherwise leave the first one running (clock, GPIO, RXNE IRQ enabled)
+// with nothing draining its ring buffer.
+TEST(CommandTransport, InitFailsWhenAlreadyInitialised)
+{
+    LONGS_EQUAL(STATUS_OK, command_transport_init(UART_INSTANCE_USART2));
+
+    LONGS_EQUAL(STATUS_ERR_BUSY, command_transport_init(UART_INSTANCE_USART1));
+    LONGS_EQUAL(UART_INSTANCE_USART2, UartSpy_GetLastInitInstance());
+}
+
 /* --- command_transport_deinit --- */
 
 // deinit() should be a no-op returning STATUS_OK when never initialised.
@@ -104,30 +116,30 @@ TEST(CommandTransport, ReceiveReturnsEmptyWhenNothingAvailable)
     LONGS_EQUAL(STATUS_ERR_EMPTY, command_transport_receive(&data));
 }
 
-/* --- command_transport_send_response --- */
+/* --- command_transport_send --- */
 
-// send_response() should reject calls made before init() (or after deinit()).
-TEST(CommandTransport, SendResponseFailsWhenNotInitialised)
+// send() should reject calls made before init() (or after deinit()).
+TEST(CommandTransport, SendFailsWhenNotInitialised)
 {
     const uint8_t frame[] = {0xA5, 0x01, 0x01, 0x1F, 0x3E};
-    LONGS_EQUAL(STATUS_ERR_NOT_INIT, command_transport_send_response(frame, sizeof(frame)));
+    LONGS_EQUAL(STATUS_ERR_NOT_INIT, command_transport_send(frame, sizeof(frame)));
 }
 
-// send_response() should reject a NULL frame pointer once initialised.
-TEST(CommandTransport, SendResponseFailsWithNullFrame)
+// send() should reject a NULL frame pointer once initialised.
+TEST(CommandTransport, SendFailsWithNullFrame)
 {
     command_transport_init(UART_INSTANCE_USART2);
-    LONGS_EQUAL(STATUS_ERR_INVALID_ARG, command_transport_send_response(NULL, 5));
+    LONGS_EQUAL(STATUS_ERR_INVALID_ARG, command_transport_send(NULL, 5));
 }
 
-// send_response() should write exactly the bytes it's given, unmodified - it doesn't
+// send() should write exactly the bytes it's given, unmodified - it doesn't
 // build the frame itself, that's frame_parser's job.
-TEST(CommandTransport, SendResponseWritesGivenBytes)
+TEST(CommandTransport, SendWritesGivenBytes)
 {
     command_transport_init(UART_INSTANCE_USART2);
 
     const uint8_t frame[] = {0xA5, 0x01, 0x01, 0x1F, 0x3E};
-    LONGS_EQUAL(STATUS_OK, command_transport_send_response(frame, sizeof(frame)));
+    LONGS_EQUAL(STATUS_OK, command_transport_send(frame, sizeof(frame)));
 
     LONGS_EQUAL(sizeof(frame), UartSpy_GetSentByteCount());
     for (uint16_t i = 0; i < sizeof(frame); i++)
@@ -136,12 +148,12 @@ TEST(CommandTransport, SendResponseWritesGivenBytes)
     }
 }
 
-// send_response() should propagate a UART write failure without swallowing it.
-TEST(CommandTransport, SendResponsePropagatesUartWriteFailure)
+// send() should propagate a UART write failure without swallowing it.
+TEST(CommandTransport, SendPropagatesUartWriteFailure)
 {
     command_transport_init(UART_INSTANCE_USART2);
     UartSpy_SetReturnStatus(STATUS_ERR_INVALID_ARG);
 
     const uint8_t frame[] = {0xA5, 0x01, 0x01, 0x1F, 0x3E};
-    LONGS_EQUAL(STATUS_ERR_INVALID_ARG, command_transport_send_response(frame, sizeof(frame)));
+    LONGS_EQUAL(STATUS_ERR_INVALID_ARG, command_transport_send(frame, sizeof(frame)));
 }

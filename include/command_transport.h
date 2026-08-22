@@ -4,13 +4,21 @@
 #include "status.h"
 #include "uart.h"
 
+/*
+ * Single-instance module: the transport owns one UART link to the host, and
+ * its state (chosen instance, RX buffer) is file-scope in command_transport.c.
+ * The instance is selectable at init, but only one may be active at a time -
+ * call command_transport_deinit() before initialising on a different one.
+ */
+
 /**
  * @brief Initialise the command transport on the given UART instance.
  *
  * Brings up @p instance for TX/RX command traffic.
  *
  * @param instance UART peripheral to use for command traffic
- * @return STATUS_OK on success, or the error returned by uart_init().
+ * @return STATUS_OK on success, STATUS_ERR_BUSY if already initialised, or
+ *         the error returned by uart_init().
  */
 status_t command_transport_init(uart_instance_t instance);
 
@@ -53,6 +61,6 @@ status_t command_transport_receive(uint8_t *data);
  *         called (or was deinitialised), or the error returned by the
  *         UART write.
  */
-status_t command_transport_send_response(const uint8_t *frame, uint16_t length);
+status_t command_transport_send(const uint8_t *frame, uint16_t length);
 
 #endif /* COMMAND_TRANSPORT_H */

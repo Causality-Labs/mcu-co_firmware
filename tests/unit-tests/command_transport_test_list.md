@@ -6,8 +6,8 @@ Test List"). Not a spec, just a working checklist; cross items off (or add new
 ones) as tests get written.
 
 Interface: `command_transport_init(instance)`, `command_transport_deinit(void)`,
-`command_transport_receive(data)`, `command_transport_send_response(frame, length)`.
-`send_response()` is pure I/O — it forwards bytes to `uart_write_buffer()`
+`command_transport_receive(data)`, `command_transport_send(frame, length)`.
+`send()` is pure I/O — it forwards bytes to `uart_write_buffer()`
 unmodified, symmetric with `receive()` wrapping `uart_read_byte()`. It does not
 build/encode the response frame itself; that's `frame_parser`'s job (not yet
 implemented — see below).
@@ -17,7 +17,7 @@ implemented — see below).
 - [x] Calls `uart_init()` with the given instance
 - [x] Returns `STATUS_OK` on success
 - [x] Propagates `uart_init()`'s failure status if it fails
-- [x] Stores the instance for `receive()`/`send_response()` to use afterward
+- [x] Stores the instance for `receive()`/`send()` to use afterward
       (implicit — covered by the calls-with-stored-instance tests below)
 
 ## command_transport_deinit(void)
@@ -38,7 +38,7 @@ implemented — see below).
 - [x] Returns `STATUS_OK` and the byte when one is available
 - [x] Returns `STATUS_ERR_EMPTY` when nothing's available
 
-## command_transport_send_response(frame, length)
+## command_transport_send(frame, length)
 
 - [x] Returns `STATUS_ERR_NOT_INIT` if called before `init()` (or after
       `deinit()`)
@@ -56,6 +56,6 @@ implemented — see below).
       CRC16-CCITT-FALSE) but not yet implemented in `frame_parser.c`.
 - [ ] Wiring `command_transport` into `main.c` in place of its inline
       UART/config/RX-buffer management, and actually calling
-      `command_transport_send_response()` with the serialized bytes (today
+      `command_transport_send()` with the serialized bytes (today
       `main.c` computes a `response_t` but never sends it — see the
       `// Build return response` no-op around `main.c:102`).

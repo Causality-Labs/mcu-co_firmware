@@ -92,6 +92,28 @@ existing code), follow *Test-Driven Development for Embedded C*'s cycle:
    collaborative decisions, and "locked in" interfaces have been revisited
    more than once when a test exposed a real gap.
 
+## Comments — do not over-comment
+
+Code should be self-documenting. Prefer a clear name or a restructured
+expression over a comment explaining an unclear one. Do **not** narrate what
+the code plainly says (`/* increment the index */`, a comment above every
+field, a header block on every trivial function).
+
+Write a comment only when the code genuinely can't carry the meaning:
+
+- **Why, not what** — a non-obvious rationale, a constraint from the hardware
+  or protocol, or the reason an obvious-looking alternative is wrong.
+  E.g. the re-init guard in `command_transport_init()` documents that
+  `uart_init()` only guards *per-instance*, which is not visible at the call
+  site.
+- **Doxygen (`@brief`/`@param`/`@return`) on public header declarations** —
+  these are the module's contract and stay. The rule above applies to
+  implementation comments in `.c` files.
+- **The one-line comment above each `TEST(...)`** required by the unit-test
+  convention above — that convention wins for test files.
+
+If a comment restates the line below it, delete the comment.
+
 ## Compliance — this constrains how you write code
 
 Target is **CERT-C** (enforced by clang-tidy `cert-*` as errors) plus cppcheck
