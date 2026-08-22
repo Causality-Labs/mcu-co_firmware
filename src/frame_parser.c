@@ -1,8 +1,11 @@
 #include <stdlib.h>
 #include "frame_parser.h"
 
-#define NO_STATE_LENGTH 3
-#define STATE_LENGTH 4
+#define TX_HEADER_LEN 2U
+#define TX_BODY_NO_STATE 1U
+#define TX_BODY_WITH_STATE 2U
+
+#define SOF_BYTE 0xA5
 
 frame_results_t frame_parser_feed(frame_t *frame, uint8_t data_byte)
 {
@@ -136,39 +139,22 @@ int frame_parser_serialize_response(response_t *response, uint8_t *serialized_re
         return -1;
     }
 
-    uint8_t needed = 0;
-    uint8_t length = 0;
+    uint8_t body_len  = response->has_state ? TX_BODY_WITH_STATE : TX_BODY_NO_STATE;
+    uint8_t frame_len = (uint8_t)(TX_HEADER_LEN + body_len);
 
-    if (response->has_state == false)
+    if (serialized_response_size < frame_len)
     {
-        if (serialized_response_size < 3)
-        {
-            return -1;
-        }
-
-        needed = NO_STATE_LENGTH;
-        length = 1;
+        return -1;
     }
 
-    if (response->has_state == true)
-    {
-        if (serialized_response_size < 4)
-        {
-            return -1;
-        }
-
-        needed = STATE_LENGTH;
-        length = 2;
-    }
-
-    serialized_response[TX_SOF_IDX] = 0xA5;
-    serialized_response[TX_LEN_IDX] = length;
-    serialized_response[TX_ACK_IDX] = response->ack;
+    serialized_response[TX_SOF_IDX] = SOF_BYTE;
+    serialized_response[TX_LEN_IDX] = body_len;
+    serialized_response[TX_ACK_IDX] = response->ack ? 1U : 0U;
 
     if (response->has_state == true)
     {
         serialized_response[TX_STATE_IDX] = response->state;
     }
 
-    return needed;
+    return (int)frame_len;
 }
