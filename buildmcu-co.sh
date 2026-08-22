@@ -93,6 +93,39 @@ cmd_test() {
     ctest --test-dir "${TEST_BUILD_DIR}" --verbose
 }
 
+# Distinct from 1 so a filter that matches nothing in one binary is not confused
+# with a real assertion failure in it.
+FILTER_MATCHED_NOTHING=2
+
+# CppUTest exits nonzero when a filter selects 0 tests, which is expected for
+# whichever binary doesn't hold the requested group. Its "ran nothing" banner is
+# the only thing separating that from a genuine failure.
+run_filtered() {
+    local binary="$1"
+    shift
+
+    local output=""
+    local result=0
+    output=$("${binary}" "$@" -v 2>&1) || result=$?
+
+    # Swallow the "test run failed" banner in this case - it reads as an error
+    # but only means the group lives in the other binary.
+    if [ "${result}" -ne 0 ] && [[ "${output}" == *"ran nothing"* ]]; then
+        echo "$(basename "${binary}"): no match, skipped."
+        return "${FILTER_MATCHED_NOTHING}"
+    fi
+
+    printf '%s\n' "${output}"
+
+    # Not "${result}": CppUTest exits with the number of failures, which could
+    # itself be FILTER_MATCHED_NOTHING.
+    if [ "${result}" -ne 0 ]; then
+        return 1
+    fi
+
+    return 0
+}
+
 cmd_test_single() {
     local filter="$1"
     local group="${filter%%:*}"
@@ -109,16 +142,27 @@ cmd_test_single() {
         cpputest_args+=(-n "${name}")
     fi
 
-    # A binary that doesn't contain this group runs 0 tests, which CppUTest
-    # itself treats as a failure (nonzero exit) - don't let that (rather than
-    # an actual assertion failure) abort the other binary or the script.
-    local status=0
-    "${TEST_BUILD_DIR}/unit_tests" "${cpputest_args[@]}" -v || status=$?
-    "${TEST_BUILD_DIR}/test_command_dispatcher" "${cpputest_args[@]}" -v || status=$?
+    local failed=0
+    local matched=0
 
-    if [ "${status}" -ne 0 ]; then
-        echo "One or more test binaries failed (or the filter matched nothing in either)." >&2
-        return "${status}"
+    for binary in unit_tests test_command_dispatcher; do
+        local result=0
+        run_filtered "${TEST_BUILD_DIR}/${binary}" "${cpputest_args[@]}" || result=$?
+        case "${result}" in
+            0) matched=1 ;;
+            "${FILTER_MATCHED_NOTHING}") ;;
+            *) failed=1 ;;
+        esac
+    done
+
+    if [ "${failed}" -ne 0 ]; then
+        echo "Test failures in '${filter}'." >&2
+        return 1
+    fi
+
+    if [ "${matched}" -eq 0 ]; then
+        echo "No tests matched '${filter}' in any test binary." >&2
+        return 1
     fi
 }
 
