@@ -55,9 +55,9 @@ int main(void)
     frame_t frame     = {0};
     frame.state       = SOF;
 
-    uint8_t serialized_frame[2 + MAX_PAYLOAD] = {0};
-    uint8_t serialized_frame_buffer_size      = 2 + MAX_PAYLOAD;
-    uint16_t recv_crc                         = 0;
+    uint8_t serialized_frame[2 + RX_MAX_PAYLOAD] = {0};
+    uint8_t serialized_frame_buffer_size         = 2 + RX_MAX_PAYLOAD;
+    uint16_t recv_crc                            = 0;
 
     for (;;)
     {

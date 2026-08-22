@@ -1,8 +1,8 @@
 #include <stdlib.h>
 #include "frame_parser.h"
 
-#define TX_HEADER_LEN 2U
-#define TX_BODY_NO_STATE 1U
+#define TX_HEADER_LEN      2U
+#define TX_BODY_NO_STATE   1U
 #define TX_BODY_WITH_STATE 2U
 
 #define SOF_BYTE 0xA5
