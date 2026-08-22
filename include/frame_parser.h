@@ -14,6 +14,8 @@
 #define TX_ACK_IDX   2
 #define TX_STATE_IDX 3
 
+#define TX_FRAME_MAX 6 /* SOF + LEN + ACK + STATE + CRC_L + CRC_H */
+
 typedef enum
 {
     FRAME_READY,
