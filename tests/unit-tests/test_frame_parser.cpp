@@ -36,7 +36,7 @@ TEST(FrameParser, FeedStaysPendingUntilSofByteReceived)
     LONGS_EQUAL(OPCODE, frame.state);
 }
 
-// A length byte greater than MAX_PAYLOAD must be rejected with FRAME_ERROR
+// A length byte greater than RX_MAX_PAYLOAD must be rejected with FRAME_ERROR
 // and reset back to SOF - this is the guard that stops a bogus length from
 // driving PAYLOAD state into writing past the fixed-size payload[] array.
 TEST(FrameParser, FeedRejectsLengthExceedingMaxPayloadAndResyncs)
@@ -44,7 +44,7 @@ TEST(FrameParser, FeedRejectsLengthExceedingMaxPayloadAndResyncs)
     frame_parser_feed(&frame, 0xA5);
     frame_parser_feed(&frame, 0x10);
 
-    LONGS_EQUAL(FRAME_ERROR, frame_parser_feed(&frame, MAX_PAYLOAD + 1));
+    LONGS_EQUAL(FRAME_ERROR, frame_parser_feed(&frame, RX_MAX_PAYLOAD + 1));
     LONGS_EQUAL(SOF, frame.state);
 
     // parser should cleanly accept a new frame after the error
@@ -52,14 +52,14 @@ TEST(FrameParser, FeedRejectsLengthExceedingMaxPayloadAndResyncs)
     LONGS_EQUAL(OPCODE, frame.state);
 }
 
-// A length exactly at MAX_PAYLOAD is the boundary case and must be accepted,
+// A length exactly at RX_MAX_PAYLOAD is the boundary case and must be accepted,
 // not rejected - pairs with the exceeding-length test above.
 TEST(FrameParser, FeedAcceptsLengthAtMaxPayloadBoundary)
 {
     frame_parser_feed(&frame, 0xA5);
     frame_parser_feed(&frame, 0x10);
 
-    LONGS_EQUAL(FRAME_IN_PROGRESS, frame_parser_feed(&frame, MAX_PAYLOAD));
+    LONGS_EQUAL(FRAME_IN_PROGRESS, frame_parser_feed(&frame, RX_MAX_PAYLOAD));
     LONGS_EQUAL(PAYLOAD, frame.state);
 }
 
@@ -179,9 +179,126 @@ TEST(FrameParser, SerializeWritesOpcodeLengthAndPayloadCorrectly)
     uint8_t buf[5] = {0};
     LONGS_EQUAL(5, frame_parser_serialize(&frame, buf, sizeof(buf)));
 
-    BYTES_EQUAL(0x10, buf[OPCODE_IDX]);
-    BYTES_EQUAL(3, buf[LENGTH_IDX]);
-    BYTES_EQUAL(0xAA, buf[PAYLOAD_IDX + 0]);
-    BYTES_EQUAL(0xBB, buf[PAYLOAD_IDX + 1]);
-    BYTES_EQUAL(0xCC, buf[PAYLOAD_IDX + 2]);
+    BYTES_EQUAL(0x10, buf[RX_OPCODE_IDX]);
+    BYTES_EQUAL(3, buf[RX_LENGTH_IDX]);
+    BYTES_EQUAL(0xAA, buf[RX_PAYLOAD_IDX + 0]);
+    BYTES_EQUAL(0xBB, buf[RX_PAYLOAD_IDX + 1]);
+    BYTES_EQUAL(0xCC, buf[RX_PAYLOAD_IDX + 2]);
+}
+
+/* --- frame_parser_serialize_response --- */
+
+// NULL response or NULL output buffer should both be rejected.
+TEST(FrameParser, SerializeResponseRejectsNullResponseOrBuffer)
+{
+    response_t resp = response_t();
+    uint8_t buf[6]; // SOF + LEN + ACK/NACK + STATE + CRC_L + CRC_H
+
+    LONGS_EQUAL(-1, frame_parser_serialize_response(NULL, buf, sizeof(buf)));
+    LONGS_EQUAL(-1, frame_parser_serialize_response(&resp, NULL, sizeof(buf)));
+}
+
+// A buffer too small to hold the frame should be rejected rather than
+// overflowed. The size needed depends on has_state, so a fixed requirement
+// would pass one of these two and fail the other.
+TEST(FrameParser, SerializeResponseRejectsBufferTooSmall)
+{
+    response_t resp = response_t();
+    resp.ack        = true;
+
+    uint8_t buf[6] = {0}; // oversized on purpose - a buggy write lands here, not on the stack
+
+    LONGS_EQUAL(-1, frame_parser_serialize_response(&resp, buf, 2)); // needs 3: SOF + LEN + ACK
+
+    resp.has_state = true;
+    LONGS_EQUAL(-1, frame_parser_serialize_response(&resp, buf, 3)); // needs 4: + STATE
+}
+
+// A buffer of exactly the needed size must be accepted - the off-by-one
+// counterpart to the too-small test, and it pins the returned byte count.
+TEST(FrameParser, SerializeResponseAcceptsBufferThatFitsExactly)
+{
+    response_t resp = response_t();
+    resp.ack        = true;
+
+    uint8_t buf[6] = {0};
+
+    LONGS_EQUAL(3, frame_parser_serialize_response(&resp, buf, 3));
+
+    resp.has_state = true;
+    LONGS_EQUAL(4, frame_parser_serialize_response(&resp, buf, 4));
+}
+
+// Happy path for a bare ACK: SOF, LEN counting only the body byte, then the
+// ACK byte itself - A5 01 01 on the wire.
+TEST(FrameParser, SerializeResponseWritesBareAckBytes)
+{
+    response_t resp = response_t();
+    resp.ack        = true;
+
+    uint8_t buf[6] = {0};
+    LONGS_EQUAL(3, frame_parser_serialize_response(&resp, buf, sizeof(buf)));
+
+    BYTES_EQUAL(0xA5, buf[TX_SOF_IDX]);
+    BYTES_EQUAL(0x01, buf[TX_LEN_IDX]); // one body byte
+    BYTES_EQUAL(0x01, buf[TX_ACK_IDX]);
+}
+
+// A NACK differs from an ACK only in the body byte, so this pins that the ack
+// flag actually reaches the buffer instead of a hardcoded 0x01. The buffer is
+// pre-filled with 0xFF because a zero-filled one can't tell "wrote 0x00" apart
+// from "never wrote anything".
+TEST(FrameParser, SerializeResponseWritesBareNackBytes)
+{
+    response_t resp = response_t();
+    resp.ack        = false;
+
+    uint8_t buf[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    LONGS_EQUAL(3, frame_parser_serialize_response(&resp, buf, sizeof(buf)));
+
+    BYTES_EQUAL(0xA5, buf[TX_SOF_IDX]);
+    BYTES_EQUAL(0x01, buf[TX_LEN_IDX]);
+    BYTES_EQUAL(0x00, buf[TX_ACK_IDX]);
+}
+
+// has_state makes LEN 2 and appends the STATE byte - A5 02 01 01 on the wire.
+// The second case uses state=0 with ack=1 so a STATE byte accidentally sourced
+// from the ack flag can't pass.
+TEST(FrameParser, SerializeResponseWritesStateByteWhenHasStateSet)
+{
+    response_t resp = response_t();
+    resp.ack        = true;
+    resp.state      = 1;
+    resp.has_state  = true;
+
+    uint8_t buf[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    LONGS_EQUAL(4, frame_parser_serialize_response(&resp, buf, sizeof(buf)));
+
+    BYTES_EQUAL(0xA5, buf[TX_SOF_IDX]);
+    BYTES_EQUAL(0x02, buf[TX_LEN_IDX]); // ACK + STATE
+    BYTES_EQUAL(0x01, buf[TX_ACK_IDX]);
+    BYTES_EQUAL(0x01, buf[TX_STATE_IDX]);
+
+    resp.state = 0;
+    LONGS_EQUAL(4, frame_parser_serialize_response(&resp, buf, sizeof(buf)));
+
+    BYTES_EQUAL(0x01, buf[TX_ACK_IDX]);
+    BYTES_EQUAL(0x00, buf[TX_STATE_IDX]);
+}
+
+// state is populated but has_state is clear, so the 4th byte must be left
+// alone. Writing it anyway emits A5 01 01 00 - LEN claims one body byte while
+// two follow, and the host reads the stray byte as CRC_L and desyncs.
+TEST(FrameParser, SerializeResponseLeavesFourthByteUntouchedWhenNoState)
+{
+    response_t resp = response_t();
+    resp.ack        = true;
+    resp.state      = 1;
+    resp.has_state  = false;
+
+    uint8_t buf[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    LONGS_EQUAL(3, frame_parser_serialize_response(&resp, buf, sizeof(buf)));
+
+    BYTES_EQUAL(0x01, buf[TX_LEN_IDX]);
+    BYTES_EQUAL(0xFF, buf[TX_STATE_IDX]);
 }
