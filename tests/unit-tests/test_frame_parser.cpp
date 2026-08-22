@@ -302,3 +302,56 @@ TEST(FrameParser, SerializeResponseLeavesFourthByteUntouchedWhenNoState)
     BYTES_EQUAL(0x01, buf[TX_LEN_IDX]);
     BYTES_EQUAL(0xFF, buf[TX_STATE_IDX]);
 }
+
+/* --- frame_parser_append_crc --- */
+
+// A NULL buffer should be rejected rather than dereferenced.
+TEST(FrameParser, AppendCrcRejectsNullBuffer)
+{
+    LONGS_EQUAL(-1, frame_parser_append_crc(NULL, 3, 6, 0x3E1F));
+}
+
+// A buffer without room for two more bytes at current_length must be rejected.
+// The second case is the overflow trap: (uint8_t)(254 + 2) wraps to 0, so a
+// same-width comparison sees "0 bytes needed", passes, and writes past the end.
+TEST(FrameParser, AppendCrcRejectsBufferTooSmall)
+{
+    // deliberately larger than any buffer_size passed below, so a write that
+    // slips through the bounds check lands here instead of off the stack
+    uint8_t buf[300] = {0};
+
+    LONGS_EQUAL(-1, frame_parser_append_crc(buf, 5, 6, 0x3E1F));     // needs 7
+    LONGS_EQUAL(-1, frame_parser_append_crc(buf, 254, 255, 0x3E1F)); // needs 256
+}
+
+// The CRC goes on little-endian - low byte at current_length, high byte after -
+// and the return accounts for both. Uses the verified bare-ACK vector:
+// A5 01 01 with CRC 0x3E1F becomes A5 01 01 1F 3E on the wire.
+TEST(FrameParser, AppendCrcWritesLowByteThenHighByte)
+{
+    uint8_t buf[6] = {0xA5, 0x01, 0x01, 0xFF, 0xFF, 0xFF};
+
+    LONGS_EQUAL(5, frame_parser_append_crc(buf, 3, sizeof(buf), 0x3E1F));
+
+    BYTES_EQUAL(0x1F, buf[3]);
+    BYTES_EQUAL(0x3E, buf[4]);
+}
+
+// Appending must only touch the two bytes at current_length. The frame already
+// serialized ahead of it stays byte-for-byte intact - overwrite any of it and
+// the CRC no longer matches the bytes the host receives - and nothing lands
+// past the CRC either. Uses the 4-byte with-state vector: A5 02 01 01 EC 81.
+TEST(FrameParser, AppendCrcLeavesSurroundingBytesUntouched)
+{
+    uint8_t buf[6] = {0xA5, 0x02, 0x01, 0x01, 0xFF, 0xFF};
+
+    LONGS_EQUAL(6, frame_parser_append_crc(buf, 4, sizeof(buf), 0x81EC));
+
+    BYTES_EQUAL(0xA5, buf[TX_SOF_IDX]);
+    BYTES_EQUAL(0x02, buf[TX_LEN_IDX]);
+    BYTES_EQUAL(0x01, buf[TX_ACK_IDX]);
+    BYTES_EQUAL(0x01, buf[TX_STATE_IDX]);
+
+    BYTES_EQUAL(0xEC, buf[4]);
+    BYTES_EQUAL(0x81, buf[5]);
+}

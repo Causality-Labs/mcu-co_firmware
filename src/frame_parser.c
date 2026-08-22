@@ -7,6 +7,8 @@
 
 #define SOF_BYTE 0xA5
 
+#define CRC_SIZE 2U
+
 frame_results_t frame_parser_feed(frame_t *frame, uint8_t data_byte)
 {
     if (frame == NULL)
@@ -17,7 +19,7 @@ frame_results_t frame_parser_feed(frame_t *frame, uint8_t data_byte)
     switch (frame->state)
     {
     case SOF:
-        if (data_byte == 0xA5)
+        if (data_byte == SOF_BYTE)
         {
             frame->state = OPCODE;
             return FRAME_IN_PROGRESS;
@@ -157,4 +159,28 @@ int frame_parser_serialize_response(response_t *response, uint8_t *serialized_re
     }
 
     return (int)frame_len;
+}
+
+//
+int frame_parser_append_crc(uint8_t *serialized_frame_buffer, uint8_t current_length, uint8_t buffer_size, uint16_t crc)
+{
+    if (serialized_frame_buffer == NULL)
+    {
+        return -1;
+    }
+
+    /* Widened deliberately: current_length + CRC_SIZE wraps to 0 in uint8_t
+     * arithmetic at current_length = 254, which would let the check pass and
+     * the writes below land past the end of the buffer. */
+    if (((uint16_t)current_length + CRC_SIZE) > (uint16_t)buffer_size)
+    {
+        return -1;
+    }
+
+    serialized_frame_buffer[current_length]      = (uint8_t)(crc & 0x00FFU);
+    serialized_frame_buffer[current_length + 1U] = (uint8_t)(crc >> 8);
+
+    int frame_size = current_length + CRC_SIZE;
+
+    return frame_size;
 }

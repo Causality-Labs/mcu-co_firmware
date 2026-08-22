@@ -56,6 +56,8 @@ int frame_parser_serialize(frame_t *frame, uint8_t *serialized_frame_buffer, uin
 
 int frame_parser_serialize_response(response_t *response, uint8_t *serialized_response, uint8_t serialized_response_size);
 
+int frame_parser_append_crc(uint8_t *serialized_frame_buffer, uint8_t current_length, uint8_t buffer_size, uint16_t crc);
+
 int frame_parser_get_crc(frame_t *frame, uint16_t *crc);
 
 #endif /* FRAME_PARSER_H */
