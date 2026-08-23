@@ -16,7 +16,7 @@ typedef struct
     log_level_t level;
     const char *module;
     const char *fmt;
-    uint32_t    args[LOG_MAX_ARGS];
+    uint32_t args[LOG_MAX_ARGS];
 } log_entry_t;
 
 static log_entry_t log_backing[LOG_QUEUE_DEPTH];
@@ -140,7 +140,7 @@ void logger_flush(void)
     }
 
     log_entry_t entry;
-    char        line[LOG_LINE_MAX];
+    char line[LOG_LINE_MAX];
 
     while (ring_buffer_read(&log_queue, &entry) == STATUS_OK)
     {
@@ -153,8 +153,8 @@ void logger_flush(void)
         /* Passing every slot is well-defined even when the format consumes
          * fewer: C99 7.19.6.1 says excess arguments are evaluated and
          * ignored. */
-        (void)snprintf(line, sizeof line, entry.fmt, entry.args[0], entry.args[1], entry.args[2],
-                       entry.args[3], entry.args[4], entry.args[5]);
+        (void)snprintf(line, sizeof line, entry.fmt, entry.args[0], entry.args[1], entry.args[2], entry.args[3],
+                       entry.args[4], entry.args[5]);
 
         emit(line);
         emit("\r\n");

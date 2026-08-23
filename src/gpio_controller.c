@@ -82,7 +82,7 @@ status_t gpio_controller_irq_cfg(const uint8_t *payload, uint8_t length)
 
     if (length != GPIO_CFG_IRQ_PAYLOAD_LEN)
     {
-        LOG_ERROR(MODULE_NAME, "Invalid length");
+        LOG_ERROR(MODULE_NAME, "invalid length %u, expected %u", length, GPIO_CFG_IRQ_PAYLOAD_LEN);
         return STATUS_ERR_INVALID_ARG;
     }
 
@@ -106,7 +106,7 @@ status_t gpio_controller_irq_cfg(const uint8_t *payload, uint8_t length)
     {
         if (gpio_deinit_interrupt(&gpio_pin) != STATUS_OK)
         {
-            LOG_ERROR(MODULE_NAME, "Failed to disarm interrupt.");
+            LOG_ERROR(MODULE_NAME, "failed to disarm interrupt on P%c%u", (char)('A' + port), pin);
             return STATUS_ERR;
         }
 
@@ -119,7 +119,7 @@ status_t gpio_controller_irq_cfg(const uint8_t *payload, uint8_t length)
 
     if (wire_edge_to_trigger(edge, &trigger) != STATUS_OK)
     {
-        LOG_ERROR(MODULE_NAME, "Failed to wire edge to trigger.");
+        LOG_ERROR(MODULE_NAME, "failed to wire edge %u to trigger", edge);
         return STATUS_ERR_INVALID_ARG;
     }
 
@@ -131,7 +131,7 @@ status_t gpio_controller_irq_cfg(const uint8_t *payload, uint8_t length)
 
     if (gpio_init_interrupt(&gpio_pin, &irq_cfg) != STATUS_OK)
     {
-        LOG_ERROR(MODULE_NAME, "button IRQ init failed");
+        LOG_ERROR(MODULE_NAME, "IRQ init failed on P%c%u", (char)('A' + port), pin);
         return STATUS_ERR;
     }
 
@@ -150,7 +150,7 @@ status_t gpio_controller_irq_bind(const uint8_t *payload, uint8_t length)
 
     if (length != GPIO_IRQ_BIND_PAYLOAD_LEN)
     {
-        LOG_ERROR(MODULE_NAME, "Invalid length");
+        LOG_ERROR(MODULE_NAME, "invalid length %u, expected %u", length, GPIO_IRQ_BIND_PAYLOAD_LEN);
         return STATUS_ERR_INVALID_ARG;
     }
 
@@ -169,7 +169,7 @@ status_t gpio_controller_irq_bind(const uint8_t *payload, uint8_t length)
 
     if ((edge != GPIO_IRQ_EDGE_RISING) && (edge != GPIO_IRQ_EDGE_FALLING) && (edge != GPIO_IRQ_EDGE_BOTH))
     {
-        LOG_ERROR(MODULE_NAME, "Invalid edge select");
+        LOG_ERROR(MODULE_NAME, "invalid edge select %u", edge);
         return STATUS_ERR_INVALID_ARG;
     }
 
@@ -191,7 +191,8 @@ status_t gpio_controller_irq_bind(const uint8_t *payload, uint8_t length)
 
     if (!is_pin_an_input(&in_gpio) || !is_pin_an_output(&out_gpio))
     {
-        LOG_ERROR(MODULE_NAME, "Pins not configured for irq bind");
+        LOG_ERROR(MODULE_NAME, "pins not configured for irq bind: in P%c%u, out P%c%u", (char)('A' + in_port), in_pin,
+                  (char)('A' + out_port), out_pin);
         return STATUS_ERR_INVALID_STATE;
     }
 
@@ -199,7 +200,7 @@ status_t gpio_controller_irq_bind(const uint8_t *payload, uint8_t length)
      * gpio_controller_irq_unbind() this pin first. */
     if (irq_bindings[in_pin].active == true)
     {
-        LOG_ERROR(MODULE_NAME, "Pin already bound - unbind first");
+        LOG_ERROR(MODULE_NAME, "P%c%u already bound - unbind first", (char)('A' + in_port), in_pin);
         return STATUS_ERR_BUSY;
     }
 
@@ -223,7 +224,7 @@ status_t gpio_controller_irq_unbind(const uint8_t *payload, uint8_t length)
 
     if (length != GPIO_IRQ_UNBIND_PAYLOAD_LEN)
     {
-        LOG_ERROR(MODULE_NAME, "Invalid length");
+        LOG_ERROR(MODULE_NAME, "invalid length %u, expected %u", length, GPIO_IRQ_UNBIND_PAYLOAD_LEN);
         return STATUS_ERR_INVALID_ARG;
     }
 
@@ -245,7 +246,7 @@ status_t gpio_controller_irq_unbind(const uint8_t *payload, uint8_t length)
      * (EDGE = off). */
     if ((irq_bindings[pin].active == false) || (irq_bindings[pin].input_pin.port != (gpio_port_t)port))
     {
-        LOG_ERROR(MODULE_NAME, "No active binding on this pin");
+        LOG_ERROR(MODULE_NAME, "no active binding on P%c%u", (char)('A' + port), pin);
         return STATUS_ERR_INVALID_STATE;
     }
 

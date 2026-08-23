@@ -78,9 +78,9 @@ void logger_log(log_level_t level, const char *module, uint8_t argc, const char 
  * list would otherwise select one of the caller's own arguments as the
  * count, silently, so this turns overflow into a build error instead.
  * ------------------------------------------------------------------ */
-#define LOG_COUNT(...)                                                                   \
-    LOG_COUNT_(__VA_ARGS__, LOG_TOO_MANY_ARGS, LOG_TOO_MANY_ARGS, LOG_TOO_MANY_ARGS,     \
-               LOG_TOO_MANY_ARGS, LOG_TOO_MANY_ARGS, LOG_TOO_MANY_ARGS, 7, 6, 5, 4, 3, 2, 1)
+#define LOG_COUNT(...)                                                                                                      \
+    LOG_COUNT_(__VA_ARGS__, LOG_TOO_MANY_ARGS, LOG_TOO_MANY_ARGS, LOG_TOO_MANY_ARGS, LOG_TOO_MANY_ARGS, LOG_TOO_MANY_ARGS,  \
+               LOG_TOO_MANY_ARGS, 7, 6, 5, 4, 3, 2, 1)
 
 #define LOG_COUNT_(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, N, ...) N
 
