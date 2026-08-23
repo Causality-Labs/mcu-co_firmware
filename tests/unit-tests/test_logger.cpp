@@ -50,7 +50,7 @@ TEST(Logger, LoggerInitReturnsNegativeOneWhenAlreadyInitialized)
 // emitted on the next flush.
 TEST(Logger, LogIgnoresNullModule)
 {
-    logger_log(LOG_LEVEL_ERROR, NULL, "msg");
+    logger_log(LOG_LEVEL_ERROR, NULL, 0U, "msg");
     logger_flush();
     LONGS_EQUAL(0, UartSpy_GetSentByteCount());
 }
@@ -58,9 +58,24 @@ TEST(Logger, LogIgnoresNullModule)
 // A NULL message string should be ignored the same way.
 TEST(Logger, LogIgnoresNullMessage)
 {
-    logger_log(LOG_LEVEL_ERROR, "MOD", NULL);
+    logger_log(LOG_LEVEL_ERROR, "MOD", 0U, NULL);
     logger_flush();
     LONGS_EQUAL(0, UartSpy_GetSentByteCount());
+}
+
+// Arguments are copied when the entry is queued, not read when it is
+// flushed: changing the variable after the log call must not change what
+// gets emitted. This is the whole point of storing argument words rather
+// than formatting later from the caller's storage.
+TEST(Logger, LogCapturesArgumentValueAtLogTime)
+{
+    uint32_t counter = 7U;
+    logger_log(LOG_LEVEL_INFO, "MOD", 1U, "count %u", counter);
+
+    counter = 99U;
+    logger_flush();
+
+    CheckEmittedBytesEqual("[INFO] MOD: count 7\r\n");
 }
 
 /* --- logger_flush --- */
@@ -68,7 +83,7 @@ TEST(Logger, LogIgnoresNullMessage)
 // A queued entry should be emitted as "[LEVEL] module: message\r\n".
 TEST(Logger, FlushEmitsQueuedEntryInBracketedFormat)
 {
-    logger_log(LOG_LEVEL_ERROR, "MOD", "hello");
+    logger_log(LOG_LEVEL_ERROR, "MOD", 0U, "hello");
     logger_flush();
     CheckEmittedBytesEqual("[ERROR] MOD: hello\r\n");
 }
@@ -77,22 +92,22 @@ TEST(Logger, FlushEmitsQueuedEntryInBracketedFormat)
 // mean a copy-paste error in the level-to-string lookup.
 TEST(Logger, FlushEmitsCorrectLabelForEachLevel)
 {
-    logger_log(LOG_LEVEL_ERROR, "M", "e");
+    logger_log(LOG_LEVEL_ERROR, "M", 0U, "e");
     logger_flush();
     CheckEmittedBytesEqual("[ERROR] M: e\r\n");
     UartSpy_Reset();
 
-    logger_log(LOG_LEVEL_WARN, "M", "w");
+    logger_log(LOG_LEVEL_WARN, "M", 0U, "w");
     logger_flush();
     CheckEmittedBytesEqual("[WARN] M: w\r\n");
     UartSpy_Reset();
 
-    logger_log(LOG_LEVEL_INFO, "M", "i");
+    logger_log(LOG_LEVEL_INFO, "M", 0U, "i");
     logger_flush();
     CheckEmittedBytesEqual("[INFO] M: i\r\n");
     UartSpy_Reset();
 
-    logger_log(LOG_LEVEL_DEBUG, "M", "d");
+    logger_log(LOG_LEVEL_DEBUG, "M", 0U, "d");
     logger_flush();
     CheckEmittedBytesEqual("[DEBUG] M: d\r\n");
 }
@@ -100,8 +115,8 @@ TEST(Logger, FlushEmitsCorrectLabelForEachLevel)
 // Multiple queued entries should be emitted in FIFO order, back to back.
 TEST(Logger, FlushEmitsMultipleQueuedEntriesInOrder)
 {
-    logger_log(LOG_LEVEL_ERROR, "A", "first");
-    logger_log(LOG_LEVEL_INFO, "B", "second");
+    logger_log(LOG_LEVEL_ERROR, "A", 0U, "first");
+    logger_log(LOG_LEVEL_INFO, "B", 0U, "second");
     logger_flush();
 
     CheckEmittedBytesEqual("[ERROR] A: first\r\n[INFO] B: second\r\n");
@@ -111,7 +126,7 @@ TEST(Logger, FlushEmitsMultipleQueuedEntriesInOrder)
 // should emit nothing.
 TEST(Logger, FlushDrainsQueueCompletely)
 {
-    logger_log(LOG_LEVEL_ERROR, "MOD", "hi");
+    logger_log(LOG_LEVEL_ERROR, "MOD", 0U, "hi");
     logger_flush();
     CHECK_TRUE(UartSpy_GetSentByteCount() > 0);
 
