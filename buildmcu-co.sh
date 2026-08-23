@@ -169,7 +169,7 @@ cmd_test_single() {
 cmd_flash() {
     case "$1" in
         st)
-            st-flash write "${BUILD_DIR}/mcu-co-firmware.bin" 0x08000000
+            st-flash --connect-under-reset --reset write "${BUILD_DIR}/mcu-co-firmware.bin" 0x08000000
             ;;
         ocd)
             echo "OpenOCD flashing not configured yet."

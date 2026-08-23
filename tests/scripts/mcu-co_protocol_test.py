@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Interactively sends one mcu-co protocol frame at a time over the command
 UART (USART2), so you can pick a frame type and watch how the MCU reacts.
@@ -12,6 +13,7 @@ rather than the device. Those frames draw no reply at all: the firmware discards
 a bad frame silently instead of NACKing it, so a timeout is the pass condition.
 """
 
+import argparse
 import sys
 import time
 from pathlib import Path
@@ -33,9 +35,10 @@ from mcuco.protocol import (  # noqa: E402
     crc16_ccitt_false,
 )
 
-# --- Adjust this to match your USB-serial adapter wired to USART2 ---------
+# --- Defaults for the USB-serial adapter wired to USART2; override with -d/-b ---
 CMD_PORT = '/dev/ttyACM0'
 BAUDRATE = 115200
+TIMEOUT_S = 1.0
 
 LED_PIN = 5     # PA5, Nucleo user LED
 BUTTON_PIN = 13  # PC13, Nucleo B1 user button
@@ -180,8 +183,32 @@ def print_menu():
     print("  q) Quit")
 
 
-def main():
-    with McuCoLink(CMD_PORT, BAUDRATE, timeout=1.0) as link:
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(
+        description=__doc__.strip().splitlines()[0],
+        epilog="Options 2-4 send deliberately malformed frames; a timeout there is the pass "
+               "condition, since the firmware discards a bad frame without replying.",
+    )
+    parser.add_argument("-d", "--device", default=CMD_PORT,
+                        help=f"command UART device (default: {CMD_PORT})")
+    parser.add_argument("-b", "--baud", type=int, default=BAUDRATE,
+                        help=f"baud rate (default: {BAUDRATE})")
+    parser.add_argument("-t", "--timeout", type=float, default=TIMEOUT_S,
+                        help=f"response timeout in seconds (default: {TIMEOUT_S})")
+    return parser.parse_args(argv)
+
+
+def main(argv=None):
+    args = parse_args(argv)
+
+    try:
+        link = McuCoLink(args.device, args.baud, timeout=args.timeout).open()
+    except OSError as exc:  # serial.SerialException derives from OSError
+        print(f"Cannot open {args.device}: {exc}", file=sys.stderr)
+        print("Is the board plugged in? Pass -d to use a different device.", file=sys.stderr)
+        return 1
+
+    with link:
         mcu = McuCo(link)
 
         while True:
@@ -205,6 +232,8 @@ def main():
 
             print("Not a valid choice, try again.")
 
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

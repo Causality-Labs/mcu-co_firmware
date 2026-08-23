@@ -73,7 +73,7 @@ int main(void)
                 int serialized_frame_size = frame_parser_serialize(&frame, serialized_frame, serialized_frame_buffer_size);
                 if (serialized_frame_size < 0)
                 {
-                    LOG_ERROR(MODULE_NAME, "frame_parser_serialize() failed.");
+                    LOG_ERROR(MODULE_NAME, "frame_parser_serialize() failed (%d)", serialized_frame_size);
                     continue;
                 }
 
@@ -86,11 +86,11 @@ int main(void)
                 uint16_t crc_computed = crc16_compute(serialized_frame, (uint8_t)serialized_frame_size);
                 if (crc16_compare(crc_computed, recv_crc) != true)
                 {
-                    LOG_INFO(MODULE_NAME, "CRC frame error.");
+                    LOG_INFO(MODULE_NAME, "CRC error: computed 0x%04x, received 0x%04x", crc_computed, recv_crc);
                     continue;
                 }
 
-                LOG_INFO(MODULE_NAME, "Valid frame recieved.");
+                LOG_INFO(MODULE_NAME, "valid frame received: opcode 0x%02x, len %u", frame.opcode, frame.length);
 
                 /* {0} leaves ack false, so this is already a valid NACK if
                  * dispatch_command() returns before populating it. */
@@ -101,13 +101,13 @@ int main(void)
                 {
                     /* No continue: the host is waiting on a reply, and resp is
                      * a populated NACK on every dispatch failure path. */
-                    LOG_ERROR(MODULE_NAME, "dispatch_command() failed, sending NACK.");
+                    LOG_ERROR(MODULE_NAME, "dispatch_command() failed (%s), sending NACK", status_to_str(disp_status));
                 }
 
                 int response_len = frame_parser_serialize_response(&resp, response_frame, sizeof(response_frame));
                 if (response_len < 0)
                 {
-                    LOG_ERROR(MODULE_NAME, "frame_parser_serialize_response() failed.");
+                    LOG_ERROR(MODULE_NAME, "frame_parser_serialize_response() failed (%d)", response_len);
                     continue;
                 }
 
@@ -120,19 +120,20 @@ int main(void)
                                                        (uint8_t)sizeof(response_frame), resp_crc);
                 if (response_len < 0)
                 {
-                    LOG_ERROR(MODULE_NAME, "frame_parser_append_crc() failed.");
+                    LOG_ERROR(MODULE_NAME, "frame_parser_append_crc() failed (%d)", response_len);
                     continue;
                 }
 
-                if (command_transport_send(response_frame, (uint16_t)response_len) != STATUS_OK)
+                status_t send_status = command_transport_send(response_frame, (uint16_t)response_len);
+                if (send_status != STATUS_OK)
                 {
-                    LOG_ERROR(MODULE_NAME, "command_transport_send() failed.");
+                    LOG_ERROR(MODULE_NAME, "command_transport_send() failed: %s", status_to_str(send_status));
                 }
             }
 
             if (frame_status == FRAME_ERROR)
             {
-                LOG_ERROR(MODULE_NAME, "Frame Error.");
+                LOG_ERROR(MODULE_NAME, "frame error on byte 0x%02x", data_byte);
             }
         }
 

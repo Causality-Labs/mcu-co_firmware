@@ -39,7 +39,7 @@ status_t dispatch_command(frame_t *frame, response_t *resp)
         status_t ret = gpio_controller_io_cfg(frame->payload, frame->length);
         if (ret != STATUS_OK)
         {
-            LOG_ERROR(MODULE_NAME, "gpio_controller_io_cfg() returned an error.");
+            LOG_ERROR(MODULE_NAME, "gpio_controller_io_cfg() failed: %s", status_to_str(ret));
             return ret;
         }
 
@@ -53,7 +53,7 @@ status_t dispatch_command(frame_t *frame, response_t *resp)
         status_t ret = gpio_controller_write(frame->payload, frame->length);
         if (ret != STATUS_OK)
         {
-            LOG_ERROR(MODULE_NAME, "gpio_controller_write() returned an error.");
+            LOG_ERROR(MODULE_NAME, "gpio_controller_write() failed: %s", status_to_str(ret));
             return ret;
         }
 
@@ -69,7 +69,7 @@ status_t dispatch_command(frame_t *frame, response_t *resp)
         status_t ret = gpio_controller_read(frame->payload, frame->length, &pin_state);
         if (ret != STATUS_OK)
         {
-            LOG_ERROR(MODULE_NAME, "gpio_controller_read() returned an error.");
+            LOG_ERROR(MODULE_NAME, "gpio_controller_read() failed: %s", status_to_str(ret));
             return ret;
         }
 
@@ -94,7 +94,7 @@ status_t dispatch_command(frame_t *frame, response_t *resp)
         status_t ret = gpio_controller_irq_bind(frame->payload, frame->length);
         if (ret != STATUS_OK)
         {
-            LOG_ERROR(MODULE_NAME, "gpio_controller_irq_bind() returned an error.");
+            LOG_ERROR(MODULE_NAME, "gpio_controller_irq_bind() failed: %s", status_to_str(ret));
             return ret;
         }
 
@@ -108,7 +108,7 @@ status_t dispatch_command(frame_t *frame, response_t *resp)
         status_t ret = gpio_controller_irq_cfg(frame->payload, frame->length);
         if (ret != STATUS_OK)
         {
-            LOG_ERROR(MODULE_NAME, "gpio_controller_irq_cfg() returned an error.");
+            LOG_ERROR(MODULE_NAME, "gpio_controller_irq_cfg() failed: %s", status_to_str(ret));
             return ret;
         }
 
@@ -122,7 +122,7 @@ status_t dispatch_command(frame_t *frame, response_t *resp)
         status_t ret = gpio_controller_irq_unbind(frame->payload, frame->length);
         if (ret != STATUS_OK)
         {
-            LOG_ERROR(MODULE_NAME, "gpio_controller_irq_unbind() returned an error.");
+            LOG_ERROR(MODULE_NAME, "gpio_controller_irq_unbind() failed: %s", status_to_str(ret));
             return ret;
         }
 
@@ -132,7 +132,7 @@ status_t dispatch_command(frame_t *frame, response_t *resp)
     }
 
     default:
-        LOG_ERROR(MODULE_NAME, "Unknown opcode.");
+        LOG_ERROR(MODULE_NAME, "unknown opcode 0x%02x", frame->opcode);
         return STATUS_ERR_UNSUPPORTED;
     }
 }
