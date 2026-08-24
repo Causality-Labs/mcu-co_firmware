@@ -34,6 +34,9 @@ typedef enum
     RCC_PERIPH_UART4,
     RCC_PERIPH_UART5,
     RCC_PERIPH_LPUART1,
+    RCC_PERIPH_TIM2,
+    RCC_PERIPH_TIM3,
+    RCC_PERIPH_TIM4,
     RCC_PERIPH_COUNT,
 } rcc_periph_t;
 
@@ -106,5 +109,19 @@ status_t rcc_periph_disable(rcc_periph_t periph);
  * @return STATUS_OK on success, STATUS_ERR_UNSUPPORTED if @p periph has no selectable clock
  */
 status_t rcc_periph_set_clock_source(rcc_periph_t periph, rcc_clk_src_t src);
+
+/**
+ * @brief Get the kernel clock frequency driving a timer peripheral.
+ *
+ * rcc_init() leaves both APB prescalers at /1, so the timer clocks equal SYSCLK
+ * and the x2 multiplier the hardware applies when an APB prescaler is above /1
+ * never comes into play. Timer drivers must call this rather than assume
+ * SYSCLK, so a future prescaler change stays a one-line fix inside rcc.c.
+ *
+ * @param periph Timer peripheral to query
+ * @return Timer kernel clock in Hz, or 0 if @p periph is not a timer or
+ *         rcc_init() has not succeeded
+ */
+uint32_t rcc_get_timer_clk_hz(rcc_periph_t periph);
 
 #endif /* RCC_H */

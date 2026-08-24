@@ -100,6 +100,7 @@ add_executable(${PROJECT_NAME}
   peripherals/gpio.c
   peripherals/rcc.c
   peripherals/systick.c
+  peripherals/timer.c
   data_structures/ring-buffer.c
   common/status.c
   common/crc16.c
