@@ -54,6 +54,9 @@ static const rcc_periph_clk_t rcc_periph_clk[RCC_PERIPH_COUNT] = {
     [RCC_PERIPH_UART4]   = {&RCC->APB1ENR1, RCC_APB1ENR1_UART4EN},
     [RCC_PERIPH_UART5]   = {&RCC->APB1ENR1, RCC_APB1ENR1_UART5EN},
     [RCC_PERIPH_LPUART1] = {&RCC->APB1ENR2, RCC_APB1ENR2_LPUART1EN},
+    [RCC_PERIPH_TIM2]    = {&RCC->APB1ENR1, RCC_APB1ENR1_TIM2EN},
+    [RCC_PERIPH_TIM3]    = {&RCC->APB1ENR1, RCC_APB1ENR1_TIM3EN},
+    [RCC_PERIPH_TIM4]    = {&RCC->APB1ENR1, RCC_APB1ENR1_TIM4EN},
 };
 
 /**
@@ -258,6 +261,20 @@ status_t rcc_periph_disable(rcc_periph_t periph)
     *rcc_periph_clk[periph].enr &= ~rcc_periph_clk[periph].bit;
 
     return STATUS_OK;
+}
+
+uint32_t rcc_get_timer_clk_hz(rcc_periph_t periph)
+{
+    switch (periph)
+    {
+    case RCC_PERIPH_TIM2:
+    case RCC_PERIPH_TIM3:
+    case RCC_PERIPH_TIM4:
+        return rcc_sysclk_hz;
+
+    default:
+        return 0U;
+    }
 }
 
 status_t rcc_periph_set_clock_source(rcc_periph_t periph, rcc_clk_src_t src)
