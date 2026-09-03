@@ -46,14 +46,8 @@ typedef enum
 typedef enum
 {
     TIMER_POLARITY_ACTIVE_HIGH = 0U,
-    TIMER_POLARITY_ACTIVE_LOW  = 1U,
+    TIMER_POLARITY_ACTIVE_LOW = 1U,
 } timer_polarity_t;
-
-/** @brief Timer time-base configuration. */
-typedef struct
-{
-    uint32_t frequency_hz;
-} timer_config_t;
 
 /** @brief PWM output configuration for a single channel. */
 typedef struct
@@ -69,14 +63,14 @@ typedef struct
  * requested frequency. The counter is left stopped and no channel output is
  * configured; use timer_start() and timer_pwm_channel_init() for those.
  *
- * @param instance Timer to initialise
- * @param config   Pointer to time-base configuration
- * @return STATUS_OK on success, STATUS_ERR_INVALID_ARG on an invalid instance,
- *         a NULL @p config, or an out-of-range frequency, STATUS_ERR_BUSY if
- *         already initialised, STATUS_ERR_NOT_INIT if the timer clock is
- *         unavailable because rcc_init() has not succeeded.
+ * @param instance     Timer to initialise
+ * @param frequency_hz Time-base frequency, TIMER_FREQ_MIN_HZ to TIMER_FREQ_MAX_HZ
+ * @return STATUS_OK on success, STATUS_ERR_INVALID_ARG on an invalid instance or
+ *         an out-of-range frequency, STATUS_ERR_BUSY if already initialised,
+ *         STATUS_ERR_NOT_INIT if the timer clock is unavailable because
+ *         rcc_init() has not succeeded.
  */
-status_t timer_init(timer_instance_t instance, const timer_config_t *config);
+status_t timer_init(timer_instance_t instance, uint32_t frequency_hz);
 
 /**
  * @brief Release a timer and every channel it drives.

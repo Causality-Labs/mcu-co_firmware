@@ -49,6 +49,7 @@ add_executable(unit_tests
   test_frame_parser.cpp
   test_gpio_controller.cpp
   test_gpio_irq_bindings.cpp
+  test_pwm_controller.cpp
   test_logger.cpp
   test_command_transport.cpp
 
@@ -60,6 +61,9 @@ add_executable(unit_tests
   ${FIRMWARE_ROOT}/src/gpio_controller.c
   ${FIRMWARE_ROOT}/src/gpio_irq_bindings.c
   fakes/gpio_spy.c
+
+  ${FIRMWARE_ROOT}/src/pwm_controller.c
+  fakes/timer_spy.c
 
   ${FIRMWARE_ROOT}/src/logger.c
   ${FIRMWARE_ROOT}/src/command_transport.c

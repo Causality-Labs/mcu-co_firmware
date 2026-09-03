@@ -9,12 +9,15 @@
 #define RX_LENGTH_IDX  1
 #define RX_PAYLOAD_IDX 2
 
-#define TX_SOF_IDX   0
-#define TX_LEN_IDX   1
-#define TX_ACK_IDX   2
-#define TX_STATE_IDX 3
+#define TX_SOF_IDX  0
+#define TX_LEN_IDX  1
+#define TX_ACK_IDX  2
+#define TX_DATA_IDX 3
 
-#define TX_FRAME_MAX 6 /* SOF + LEN + ACK + STATE + CRC_L + CRC_H */
+/* Widest response payload: PWM_GROUP_GET's 32-bit achieved frequency. */
+#define TX_DATA_MAX 4
+
+#define TX_FRAME_MAX 9 /* SOF + LEN + ACK + TX_DATA_MAX + CRC_L + CRC_H */
 
 typedef enum
 {
@@ -43,23 +46,31 @@ typedef struct
     uint8_t payload_idx;
     uint8_t crc_low;
     uint8_t crc_high;
-} frame_t;
+} command_frame_t;
 
+/**
+ * @brief A command's reply: an outcome, plus the value a read command returns.
+ *
+ * @p data_len is fixed per opcode rather than per outcome — a read NACKs with
+ * its data bytes zeroed rather than absent, so the host can size the frame
+ * before it knows whether the command succeeded.
+ */
 typedef struct
 {
     bool ack;
-    uint8_t state;
-    bool has_state;
-} response_t;
+    uint8_t data[TX_DATA_MAX];
+    uint8_t data_len;
+} response_frame_t;
 
-frame_results_t frame_parser_feed(frame_t *frame, uint8_t data_byte);
+frame_results_t frame_parser_feed(command_frame_t *frame, uint8_t data_byte);
 
-int frame_parser_serialize(frame_t *frame, uint8_t *serialized_frame_buffer, uint8_t serialized_frame_size);
+int frame_parser_serialize(command_frame_t *frame, uint8_t *serialized_frame_buffer, uint8_t serialized_frame_size);
 
-int frame_parser_serialize_response(response_t *response, uint8_t *serialized_response, uint8_t serialized_response_size);
+int frame_parser_serialize_response(response_frame_t *response, uint8_t *serialized_response,
+                                    uint8_t serialized_response_size);
 
 int frame_parser_append_crc(uint8_t *serialized_frame_buffer, uint8_t current_length, uint8_t buffer_size, uint16_t crc);
 
-int frame_parser_get_crc(frame_t *frame, uint16_t *crc);
+int frame_parser_get_crc(command_frame_t *frame, uint16_t *crc);
 
 #endif /* FRAME_PARSER_H */

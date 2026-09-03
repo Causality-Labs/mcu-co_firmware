@@ -96,6 +96,7 @@ add_executable(${PROJECT_NAME}
   src/command_transport.c
   src/gpio_controller.c
   src/gpio_irq_bindings.c
+  src/pwm_controller.c
   peripherals/uart.c
   peripherals/gpio.c
   peripherals/rcc.c

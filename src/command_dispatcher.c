@@ -14,7 +14,19 @@
 #define GPIO_IRQ_CFG    0x34U
 #define GPIO_IRQ_UNBIND 0x35U
 
-status_t dispatch_command(frame_t *frame, response_t *resp)
+/* A NACK's single data byte is the reason it failed, so the host can tell
+ * "already in use" from "bad pin" instead of just seeing a refusal. Successful
+ * replies use data for the value the command read, so the two never collide. */
+static status_t reply_nack(response_frame_t *resp, status_t reason)
+{
+    resp->ack      = false;
+    resp->data[0]  = (uint8_t)reason;
+    resp->data_len = 1U;
+
+    return reason;
+}
+
+status_t dispatch_command(command_frame_t *frame, response_frame_t *resp)
 {
     if (frame == NULL)
     {
@@ -28,9 +40,8 @@ status_t dispatch_command(frame_t *frame, response_t *resp)
         return STATUS_ERR_INVALID_ARG;
     }
 
-    resp->ack       = false;
-    resp->state     = 0U;
-    resp->has_state = false;
+    resp->ack      = false;
+    resp->data_len = 0U;
 
     switch (frame->opcode)
     {
@@ -40,7 +51,7 @@ status_t dispatch_command(frame_t *frame, response_t *resp)
         if (ret != STATUS_OK)
         {
             LOG_ERROR(MODULE_NAME, "gpio_controller_io_cfg() failed: %s", status_to_str(ret));
-            return ret;
+            return reply_nack(resp, ret);
         }
 
         resp->ack = true;
@@ -54,7 +65,7 @@ status_t dispatch_command(frame_t *frame, response_t *resp)
         if (ret != STATUS_OK)
         {
             LOG_ERROR(MODULE_NAME, "gpio_controller_write() failed: %s", status_to_str(ret));
-            return ret;
+            return reply_nack(resp, ret);
         }
 
         resp->ack = true;
@@ -70,12 +81,12 @@ status_t dispatch_command(frame_t *frame, response_t *resp)
         if (ret != STATUS_OK)
         {
             LOG_ERROR(MODULE_NAME, "gpio_controller_read() failed: %s", status_to_str(ret));
-            return ret;
+            return reply_nack(resp, ret);
         }
 
-        resp->ack       = true;
-        resp->state     = pin_state;
-        resp->has_state = true;
+        resp->ack      = true;
+        resp->data[0]  = pin_state ? 1U : 0U;
+        resp->data_len = 1U;
 
         if (pin_state == true)
         {
@@ -95,7 +106,7 @@ status_t dispatch_command(frame_t *frame, response_t *resp)
         if (ret != STATUS_OK)
         {
             LOG_ERROR(MODULE_NAME, "gpio_controller_irq_bind() failed: %s", status_to_str(ret));
-            return ret;
+            return reply_nack(resp, ret);
         }
 
         resp->ack = true;
@@ -109,7 +120,7 @@ status_t dispatch_command(frame_t *frame, response_t *resp)
         if (ret != STATUS_OK)
         {
             LOG_ERROR(MODULE_NAME, "gpio_controller_irq_cfg() failed: %s", status_to_str(ret));
-            return ret;
+            return reply_nack(resp, ret);
         }
 
         resp->ack = true;
@@ -123,7 +134,7 @@ status_t dispatch_command(frame_t *frame, response_t *resp)
         if (ret != STATUS_OK)
         {
             LOG_ERROR(MODULE_NAME, "gpio_controller_irq_unbind() failed: %s", status_to_str(ret));
-            return ret;
+            return reply_nack(resp, ret);
         }
 
         resp->ack = true;
@@ -133,6 +144,6 @@ status_t dispatch_command(frame_t *frame, response_t *resp)
 
     default:
         LOG_ERROR(MODULE_NAME, "unknown opcode 0x%02x", frame->opcode);
-        return STATUS_ERR_UNSUPPORTED;
+        return reply_nack(resp, STATUS_ERR_UNSUPPORTED);
     }
 }
