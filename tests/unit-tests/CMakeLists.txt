@@ -89,9 +89,10 @@ target_link_libraries(unit_tests PRIVATE CppUTest CppUTestExt)
 
 add_test(NAME unit_tests COMMAND unit_tests -v)
 
-# command_dispatcher.c's tests need gpio_controller.h faked (GpioControllerSpy),
-# but gpio_controller.c is REAL in unit_tests above - a fake and the real file
-# can't both define gpio_controller_io_cfg() in one binary. Separate executable,
+# command_dispatcher.c's tests need gpio_controller.h and pwm_controller.h faked
+# (GpioControllerSpy, PwmControllerSpy), but both of those .c files are REAL in
+# unit_tests above - a fake and the real file can't both define
+# gpio_controller_io_cfg() in one binary. Separate executable,
 # per TDD for Embedded C's own "Smaller Test Builds" (Appendix A1.3): split into
 # multiple test binaries when different test subjects need conflicting fakes for
 # the same collaborator.
@@ -101,6 +102,7 @@ add_executable(test_command_dispatcher
 
   ${FIRMWARE_ROOT}/src/command_dispatcher.c
   fakes/gpio_controller_spy.c
+  fakes/pwm_controller_spy.c
 )
 
 target_include_directories(test_command_dispatcher PRIVATE
