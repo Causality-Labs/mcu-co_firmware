@@ -11,6 +11,10 @@ so a command typed here is the command that will be typed there:
     mcu-co-cli gpio irq cfg both C 13
     mcu-co-cli gpio irq bind both C 13 toggle A 5
     mcu-co-cli gpio irq unbind C 13
+    mcu-co-cli pwm group cfg 1000 0
+    mcu-co-cli pwm channel cfg high A 5
+    mcu-co-cli pwm channel set 250 A 5
+    mcu-co-cli pwm group get 0
 
 Exit codes are the scriptable result, since ACK/NACK is the only success signal
 the protocol carries. Note EXIT_NO_RESPONSE is 3, not 2: argparse already exits
@@ -23,7 +27,7 @@ import sys
 
 from .client import McuCo
 from .link import LinkError, LinkTimeout
-from .protocol import Action, Dir, Edge, Level, Port, ProtocolError, build_command
+from .protocol import Action, Dir, Edge, Level, Polarity, Port, ProtocolError, build_command
 
 EXIT_ACK = 0
 EXIT_NACK = 1
@@ -39,6 +43,12 @@ LEVELS = {"low": Level.LOW, "high": Level.HIGH}
 EDGES = {"off": Edge.OFF, "rising": Edge.RISING, "falling": Edge.FALLING, "both": Edge.BOTH}
 BIND_EDGES = {name: edge for name, edge in EDGES.items() if edge != Edge.OFF}
 ACTIONS = {"low": Action.LOW, "high": Action.HIGH, "toggle": Action.TOGGLE}
+POLARITIES = {"high": Polarity.ACTIVE_HIGH, "low": Polarity.ACTIVE_LOW}
+
+GROUP_MAX = 2
+DUTY_MAX = 1000
+FREQ_MIN = 1
+FREQ_MAX = 1_000_000
 
 
 def port_arg(token: str) -> Port:
@@ -58,6 +68,28 @@ def pin_arg(token: str) -> int:
     if not 0 <= pin <= 15:
         raise argparse.ArgumentTypeError(f"pin {pin} out of range (expected 0-15)")
     return pin
+
+
+def _bounded_int(token: str, name: str, low: int, high: int, unit: str = "") -> int:
+    try:
+        value = int(token)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid {name} {token!r} (expected an integer)") from None
+    if not low <= value <= high:
+        raise argparse.ArgumentTypeError(f"{name} {value} out of range (expected {low}-{high}{unit})")
+    return value
+
+
+def group_arg(token: str) -> int:
+    return _bounded_int(token, "group", 0, GROUP_MAX)
+
+
+def duty_arg(token: str) -> int:
+    return _bounded_int(token, "duty", 0, DUTY_MAX, ", tenths of a percent")
+
+
+def freq_arg(token: str) -> int:
+    return _bounded_int(token, "freq_hz", FREQ_MIN, FREQ_MAX, " Hz")
 
 
 class DryRunMcuCo(McuCo):
@@ -86,7 +118,7 @@ def _add_target(parser):
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mcu-co-cli",
-        description="Send mcu-co GPIO commands over the command UART.",
+        description="Send mcu-co GPIO and PWM commands over the command UART.",
     )
     parser.add_argument("-d", "--device", default=DEFAULT_DEVICE,
                         help=f"serial device (default: {DEFAULT_DEVICE})")
@@ -96,9 +128,12 @@ def build_parser() -> argparse.ArgumentParser:
                         help=f"response timeout in seconds (default: {DEFAULT_TIMEOUT_S})")
     parser.add_argument("-n", "--dry-run", action="store_true",
                         help="print the frame that would be sent, without opening the device")
+    parser.add_argument("--show-frames", action="store_true",
+                        help="print the command and response frames as hex")
 
-    gpio = parser.add_subparsers(dest="group", required=True).add_parser(
-        "gpio", help="GPIO commands")
+    # dest is "peripheral", not "group": pwm's own <group> argument owns that name.
+    peripheral = parser.add_subparsers(dest="peripheral", required=True)
+    gpio = peripheral.add_parser("gpio", help="GPIO commands")
     gpio_cmd = gpio.add_subparsers(dest="command", required=True)
 
     cfg = gpio_cmd.add_parser("cfg", help="configure pin direction")
@@ -131,10 +166,46 @@ def build_parser() -> argparse.ArgumentParser:
     irq_unbind = irq_cmd.add_parser("unbind", help="drop a binding, leaving the trigger armed")
     _add_target(irq_unbind)
 
+    pwm = peripheral.add_parser("pwm", help="PWM commands")
+    pwm_cmd = pwm.add_subparsers(dest="command", required=True)
+
+    pwm_group = pwm_cmd.add_parser("group", help="frequency-group commands")
+    pwm_group_cmd = pwm_group.add_subparsers(dest="group_command", required=True)
+
+    group_cfg = pwm_group_cmd.add_parser("cfg", help="set a group's frequency and start it")
+    group_cfg.add_argument("freq_hz", type=freq_arg)
+    group_cfg.add_argument("group", type=group_arg)
+
+    group_get = pwm_group_cmd.add_parser("get", help="read a group's achieved frequency")
+    group_get.add_argument("group", type=group_arg)
+
+    group_release = pwm_group_cmd.add_parser("release", help="tear a group down")
+    group_release.add_argument("group", type=group_arg)
+
+    pwm_channel = pwm_cmd.add_parser("channel", help="per-pin commands")
+    pwm_channel_cmd = pwm_channel.add_subparsers(dest="channel_command", required=True)
+
+    channel_cfg = pwm_channel_cmd.add_parser("cfg", help="claim a pin for PWM, silent at duty 0")
+    channel_cfg.add_argument("polarity", choices=sorted(POLARITIES))
+    _add_target(channel_cfg)
+
+    channel_set = pwm_channel_cmd.add_parser("set", help="set a claimed pin's duty cycle")
+    channel_set.add_argument("duty", type=duty_arg)
+    _add_target(channel_set)
+
+    channel_get = pwm_channel_cmd.add_parser("get", help="read back a pin's duty cycle")
+    _add_target(channel_get)
+
+    channel_release = pwm_channel_cmd.add_parser("release", help="free one pin, leaving the group running")
+    _add_target(channel_release)
+
     return parser
 
 
 def run_command(mcu: McuCo, args):
+    if args.peripheral == "pwm":
+        return run_pwm_command(mcu, args)
+
     if args.command == "cfg":
         return mcu.gpio_cfg(DIRECTIONS[args.direction], args.port, args.pin)
     if args.command == "set":
@@ -150,6 +221,63 @@ def run_command(mcu: McuCo, args):
     return mcu.gpio_irq_unbind(args.port, args.pin)
 
 
+def run_pwm_command(mcu: McuCo, args):
+    if args.command == "group":
+        if args.group_command == "cfg":
+            return mcu.pwm_group_cfg(args.freq_hz, args.group)
+        if args.group_command == "get":
+            return mcu.pwm_group_get(args.group)
+        return mcu.pwm_group_release(args.group)
+
+    if args.channel_command == "cfg":
+        return mcu.pwm_channel_cfg(POLARITIES[args.polarity], args.port, args.pin)
+    if args.channel_command == "set":
+        return mcu.pwm_channel_set(args.duty, args.port, args.pin)
+    if args.channel_command == "get":
+        return mcu.pwm_channel_get(args.port, args.pin)
+    return mcu.pwm_channel_release(args.port, args.pin)
+
+
+def _show_frames(link) -> None:
+    """Print whichever half of the exchange actually happened."""
+    if link is None:
+        return
+    if link.last_command_raw:
+        print(f"TX  {link.last_command_raw.hex(' ')}")
+    if link.last_response_raw:
+        print(f"RX  {link.last_response_raw.hex(' ')}")
+
+
+def describe(args, response) -> str:
+    """
+    Render a response for the terminal.
+
+    A read's DATA is only bytes to the parser - LEN sizes the frame, not the
+    opcode - so what those bytes *mean* is known here, at the verb that was
+    run, and nowhere below.
+    """
+    if not response.ack:
+        reason = response.reason
+        if reason is None:
+            return "FAILED"
+        name = reason.name if hasattr(reason, "name") else f"0x{reason:02X}"
+        return f"FAILED - {name}"
+
+    if response.value is None:
+        return "OK"
+
+    if args.peripheral == "gpio" and args.command == "get":
+        return f"OK - state={response.value} ({'high' if response.value else 'low'})"
+
+    if args.peripheral == "pwm" and args.command == "channel":
+        return f"OK - duty={response.value} ({response.value / 10:.1f}%)"
+
+    if args.peripheral == "pwm" and args.command == "group":
+        return f"OK - freq={response.value} Hz"
+
+    return f"OK - value={response.value}"
+
+
 def main(argv=None, connect=McuCo.connect) -> int:
     args = build_parser().parse_args(argv)
 
@@ -160,15 +288,21 @@ def main(argv=None, connect=McuCo.connect) -> int:
             print(frame.hex(" "))
         return EXIT_ACK
 
+    mcu = None
     try:
         with connect(args.device, args.baud, args.timeout) as mcu:
             response = run_command(mcu, args)
     except (LinkTimeout, ProtocolError) as exc:
+        if args.show_frames:
+            _show_frames(getattr(mcu, "link", None))
         print(f"no response: {exc}", file=sys.stderr)
         return EXIT_NO_RESPONSE
     except (LinkError, OSError) as exc:
         print(f"link error: {exc}", file=sys.stderr)
         return EXIT_NO_RESPONSE
 
-    print(response)
+    if args.show_frames:
+        _show_frames(mcu.link)
+
+    print(describe(args, response))
     return EXIT_ACK if response.ack else EXIT_NACK

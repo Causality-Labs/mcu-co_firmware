@@ -9,13 +9,24 @@ to see how the MCU responded to each frame.
 Frame encoding lives in tools/mcu-co-cli/mcuco/protocol.py and the transport in
 mcuco/link.py — this script is firmware bring-up, so it keeps the deliberately
 malformed frames (bad CRC, oversized LEN) that exercise the parser's error paths
-rather than the device. Those frames draw no reply at all: the firmware discards
-a bad frame silently instead of NACKing it, so a timeout is the pass condition.
+rather than the device.
+
+Every test declares what it expects (see Expect) and is reported PASS or FAIL
+against it. Note that the malformed frames invert the usual condition: the
+firmware discards a bad frame silently instead of NACKing it, so **no reply** is
+the pass, and an ACK there is a failure. Option 'a' runs every self-checking
+test and tallies them; the exit code is non-zero if any of them failed, so this
+can go in a bring-up checklist after each flash.
+
+Two entries can't be judged from the wire alone: the blink and button-bind demos
+report how many of their steps were accepted, but whether the LED actually moved
+is yours to confirm.
 """
 
 import argparse
 import sys
 import time
+from enum import Enum, auto
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools" / "mcu-co-cli"))
@@ -35,6 +46,14 @@ from mcuco.protocol import (  # noqa: E402
     crc16_ccitt_false,
 )
 
+class Expect(Enum):
+    """What a test counts as a pass."""
+
+    ACK = auto()       # the MCU accepted the command
+    NACK = auto()      # the MCU refused it, and saying so is the correct behaviour
+    NO_REPLY = auto()  # a malformed frame: the parser drops it without answering
+
+
 # --- Defaults for the USB-serial adapter wired to USART2; override with -d/-b ---
 CMD_PORT = '/dev/ttyACM0'
 BAUDRATE = 115200
@@ -44,15 +63,38 @@ LED_PIN = 5     # PA5, Nucleo user LED
 BUTTON_PIN = 13  # PC13, Nucleo B1 user button
 
 
-def send(link, name: str, frame: bytes) -> None:
-    """Send one frame and report what came back, if anything."""
+def _verdict(ok: bool, expect: Expect, detail: str = "") -> bool:
+    if ok:
+        print(f"  PASS{f' - {detail}' if detail else ''}")
+    else:
+        print(f"  FAIL - expected {expect.name}{f', {detail}' if detail else ''}")
+    return ok
+
+
+def send(link, name: str, frame: bytes, expect: Expect) -> bool:
+    """Send one frame, report what came back, and judge it against `expect`."""
     print(f"Sent [{name}]: {frame.hex(' ')}")
     try:
-        print(f"  <- {link.send(frame)}")
-    except LinkTimeout as exc:
-        print(f"  <- no response ({exc})")
+        response = link.send(frame)
+    except LinkTimeout:
+        print("  <- no response")
+        return _verdict(expect is Expect.NO_REPLY, expect, "frame discarded, as it should be"
+                        if expect is Expect.NO_REPLY else "the MCU said nothing")
     except ProtocolError as exc:
+        if link.last_response_raw:
+            print(f"  <- {link.last_response_raw.hex(' ')}")
         print(f"  <- malformed response ({exc})")
+        return _verdict(False, expect, "reply did not decode")
+
+    if link.last_response_raw:
+        print(f"  <- {link.last_response_raw.hex(' ')}")
+    print(f"  <- {response}")
+
+    if expect is Expect.ACK:
+        return _verdict(response.ack, expect, f"got {response}")
+    if expect is Expect.NACK:
+        return _verdict(not response.ack, expect, f"got {response}")
+    return _verdict(False, expect, "the MCU answered a frame it should have dropped")
 
 
 def build_cfg_output_pa5() -> bytes:
@@ -99,15 +141,32 @@ def build_invalid_frame_wrong_crc() -> bytes:
     return bytes(frame)
 
 
-def step(name: str, call) -> None:
-    """Run one client call and report what came back, if anything."""
+def step(name: str, call) -> bool:
+    """Run one client call, report the reply, and return whether it was accepted."""
     print(f"Sent [{name}]")
     try:
-        print(f"  <- {call()}")
+        response = call()
     except LinkTimeout as exc:
         print(f"  <- no response ({exc})")
+        return False
     except ProtocolError as exc:
         print(f"  <- malformed response ({exc})")
+        return False
+
+    print(f"  <- {response}")
+    return response.ack
+
+
+def _report_demo(accepted: int, sent: int, watch_for: str) -> bool:
+    """
+    Demos are only half-checkable: the wire says whether every step was
+    accepted, but whether the hardware actually moved is yours to see. Reported
+    separately from PASS/FAIL so the two are never confused.
+    """
+    print(f"  {accepted}/{sent} steps ACKed"
+          + ("" if accepted == sent else "  <- some steps were refused"))
+    print(f"  CONFIRM VISUALLY: {watch_for}")
+    return accepted == sent
 
 
 def run_irq_bind_demo(mcu, step_delay_s: float = 0.3):
@@ -133,9 +192,13 @@ def run_irq_bind_demo(mcu, step_delay_s: float = 0.3):
          lambda: mcu.gpio_irq_bind(Edge.BOTH, Port.C, BUTTON_PIN, Action.TOGGLE, Port.A, LED_PIN)),
     ]
 
+    accepted = 0
     for name, call in steps:
-        step(name, call)
+        accepted += step(name, call)
         time.sleep(step_delay_s)
+
+    return _report_demo(accepted, len(steps),
+                        "press B1 - the LED should toggle with no further frames sent")
 
 
 def run_blink_led_test(mcu, toggle_count: int = 20, period_s: float = 0.5):
@@ -145,41 +208,79 @@ def run_blink_led_test(mcu, toggle_count: int = 20, period_s: float = 0.5):
     Watch the LED, or the log UART (USART1), to confirm each toggle. Ctrl+C
     stops early.
     """
-    step("gpio cfg output A 5", lambda: mcu.gpio_cfg(Dir.OUTPUT, Port.A, LED_PIN))
+    accepted = step("gpio cfg output A 5", lambda: mcu.gpio_cfg(Dir.OUTPUT, Port.A, LED_PIN))
+    sent = 1
     time.sleep(period_s)
 
     level = Level.HIGH
     try:
         for _ in range(toggle_count):
-            step(f"gpio set {'high' if level else 'low'} A 5",
-                 lambda lvl=level: mcu.gpio_set(lvl, Port.A, LED_PIN))
+            accepted += step(f"gpio set {'high' if level else 'low'} A 5",
+                             lambda lvl=level: mcu.gpio_set(lvl, Port.A, LED_PIN))
+            sent += 1
             level = Level.LOW if level else Level.HIGH
             time.sleep(period_s)
     except KeyboardInterrupt:
         print("\nBlink test stopped early.")
 
+    return _report_demo(accepted, sent, "the LED should have alternated on each step")
 
+
+# Each entry carries the outcome that counts as a pass. The malformed frames
+# (2-4) expect NO_REPLY: the parser drops them without answering, so an ACK
+# there is the firmware failing to reject something it should have.
 MENU_OPTIONS = {
-    '1': ("Valid frame", build_cfg_output_pa5),
-    '2': ("Valid frame, wrong CRC", build_valid_frame_wrong_crc),
-    '3': ("Invalid frame (LEN > MAX_PAYLOAD)", build_invalid_frame),
-    '4': ("Invalid frame, wrong CRC", build_invalid_frame_wrong_crc),
-    '6': ("Configure PC13 as input (Nucleo B1 button)", build_cfg_input_pc13),
-    '7': ("Read PC13 state (Nucleo B1 button)", build_gpio_read_pc13),
+    '1': ("Valid frame", build_cfg_output_pa5, Expect.ACK),
+    '2': ("Valid frame, wrong CRC", build_valid_frame_wrong_crc, Expect.NO_REPLY),
+    '3': ("Invalid frame (LEN > MAX_PAYLOAD)", build_invalid_frame, Expect.NO_REPLY),
+    '4': ("Invalid frame, wrong CRC", build_invalid_frame_wrong_crc, Expect.NO_REPLY),
+    '6': ("Configure PC13 as input (Nucleo B1 button)", build_cfg_input_pc13, Expect.ACK),
+    '7': ("Read PC13 state (Nucleo B1 button)", build_gpio_read_pc13, Expect.ACK),
 }
 
+# Demos, not tests: they need a human to watch the board, so they are left out
+# of the run-all tally rather than reported as passes.
 ACTIONS = {
     '5': ("Blink LED (PA5): cfg output, then toggle high/low", run_blink_led_test),
     '8': ("Bind button (PC13) both-edge -> toggle LED (PA5)", run_irq_bind_demo),
 }
 
+RUN_ALL_KEY = 'a'
+RUN_ALL_ORDER = ('1', '6', '7', '2', '3', '4')  # valid frames first, malformed last
+
+
+def run_all(link) -> bool:
+    """Run every self-checking test in order and tally the result."""
+    print("\nRunning all self-checking tests. The malformed frames wait out the "
+          "response timeout each, so this is not instant.\n")
+
+    results = {}
+    for key in RUN_ALL_ORDER:
+        name, builder, expect = MENU_OPTIONS[key]
+        results[name] = send(link, name, builder(), expect)
+        print()
+
+    passed = sum(results.values())
+    print(f"--- {passed}/{len(results)} passed ---")
+    for name, ok in results.items():
+        if not ok:
+            print(f"  FAILED: {name}")
+
+    return passed == len(results)
+
 
 def print_menu():
+    """Frames and demos are held in separate dicts, so merge them to list in key order."""
+    entries = {key: (name, f"[expects {expect.name}]")
+               for key, (name, _builder, expect) in MENU_OPTIONS.items()}
+    entries.update({key: (name, "[demo, confirm visually]")
+                    for key, (name, _action) in ACTIONS.items()})
+
     print("\nSelect a frame to send:")
-    for key, (name, _builder) in MENU_OPTIONS.items():
-        print(f"  {key}) {name}")
-    for key, (name, _action) in ACTIONS.items():
-        print(f"  {key}) {name}")
+    for key in sorted(entries):
+        name, tag = entries[key]
+        print(f"  {key}) {name}  {tag}")
+    print(f"  {RUN_ALL_KEY}) Run all self-checking tests")
     print("  q) Quit")
 
 
@@ -208,6 +309,8 @@ def main(argv=None):
         print("Is the board plugged in? Pass -d to use a different device.", file=sys.stderr)
         return 1
 
+    failures = 0
+
     with link:
         mcu = McuCo(link)
 
@@ -218,21 +321,27 @@ def main(argv=None):
             if choice == 'q':
                 break
 
+            if choice == RUN_ALL_KEY:
+                failures += not run_all(link)
+                continue
+
             option = MENU_OPTIONS.get(choice)
             if option is not None:
-                name, builder = option
-                send(link, name, builder())
+                name, builder, expect = option
+                failures += not send(link, name, builder(), expect)
                 continue
 
             action = ACTIONS.get(choice)
             if action is not None:
                 _name, action_fn = action
-                action_fn(mcu)
+                failures += not action_fn(mcu)
                 continue
 
             print("Not a valid choice, try again.")
 
-    return 0
+    if failures:
+        print(f"\n{failures} test(s) failed this session.")
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":
