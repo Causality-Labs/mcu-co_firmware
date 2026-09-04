@@ -39,7 +39,9 @@ from mcuco.protocol import (  # noqa: E402
     Dir,
     Edge,
     Level,
+    NackReason,
     Opcode,
+    Polarity,
     Port,
     ProtocolError,
     build_command,
@@ -59,8 +61,27 @@ CMD_PORT = '/dev/ttyACM0'
 BAUDRATE = 115200
 TIMEOUT_S = 1.0
 
-LED_PIN = 5     # PA5, Nucleo user LED
+LED_PIN = 5     # PA5, Nucleo user LED - also TIM2_CH1, so it doubles as PWM group 0
 BUTTON_PIN = 13  # PC13, Nucleo B1 user button
+
+# PWM tests run on group 1 (TIM3) / PC6 (TIM3_CH1), deliberately away from PA5:
+# a pin already claimed as GPIO cannot be handed to PWM, and the protocol has no
+# way to release one, so anything sharing PA5 would depend on test order.
+PWM_GROUP = 1
+PWM_PORT, PWM_PIN = Port.C, 6
+PWM_FREQ_HZ = 1000
+PWM_DUTY = 250
+
+# PA0 has no timer channel mapped, so claiming it is a request the hardware
+# cannot satisfy rather than a bad argument.
+UNMAPPED_PORT, UNMAPPED_PIN = Port.A, 0
+
+# The firmware answers every "not configured yet" case with ERR_NOT_INIT.
+# mcu-co_Protocol.md documents ERR_INVALID_STATE for three of them (sections 11
+# and 12, and the reason-code table); the firmware is self-consistent and the
+# doc is not, so these expectations follow the firmware. See the note in the
+# module docstring.
+NOT_CONFIGURED = NackReason.ERR_NOT_INIT
 
 
 def _verdict(ok: bool, expect: Expect, detail: str = "") -> bool:
@@ -71,7 +92,7 @@ def _verdict(ok: bool, expect: Expect, detail: str = "") -> bool:
     return ok
 
 
-def send(link, name: str, frame: bytes, expect: Expect) -> bool:
+def send(link, name: str, frame: bytes, expect: Expect, reason=None) -> bool:
     """Send one frame, report what came back, and judge it against `expect`."""
     print(f"Sent [{name}]: {frame.hex(' ')}")
     try:
@@ -93,7 +114,11 @@ def send(link, name: str, frame: bytes, expect: Expect) -> bool:
     if expect is Expect.ACK:
         return _verdict(response.ack, expect, f"got {response}")
     if expect is Expect.NACK:
-        return _verdict(not response.ack, expect, f"got {response}")
+        if response.ack:
+            return _verdict(False, expect, f"got {response}")
+        if reason is not None and response.reason != reason:
+            return _verdict(False, expect, f"expected reason {reason.name}, got {response}")
+        return _verdict(True, expect, f"got {response}")
     return _verdict(False, expect, "the MCU answered a frame it should have dropped")
 
 
@@ -155,6 +180,212 @@ def step(name: str, call) -> bool:
 
     print(f"  <- {response}")
     return response.ack
+
+
+def check(name: str, call, expect: Expect, value=None, reason=None, tolerance: float = 0.0) -> bool:
+    """
+    Run one client call and judge the reply.
+
+    Beyond ACK/NACK this can pin the value a read returned (`value`, with an
+    optional fractional `tolerance` for figures the hardware rounds) and the
+    reason a NACK carried - a command refused for the wrong reason has still
+    told you something is wrong.
+    """
+    print(f"Sent [{name}]")
+    try:
+        response = call()
+    except LinkTimeout as exc:
+        print(f"  <- no response ({exc})")
+        return _verdict(expect is Expect.NO_REPLY, expect, "the MCU said nothing")
+    except ProtocolError as exc:
+        print(f"  <- malformed response ({exc})")
+        return _verdict(False, expect, "reply did not decode")
+
+    print(f"  <- {response}")
+
+    if expect is Expect.NACK:
+        if response.ack:
+            return _verdict(False, expect, f"got {response}")
+        if reason is not None and response.reason != reason:
+            return _verdict(False, expect, f"expected reason {reason.name}, got {response}")
+        return _verdict(True, expect, f"got {response}")
+
+    if expect is not Expect.ACK:
+        return _verdict(False, expect, "the MCU answered a frame it should have dropped")
+
+    if not response.ack:
+        return _verdict(False, expect, f"got {response}")
+
+    if value is not None:
+        slack = value * tolerance
+        if abs((response.value or 0) - value) > slack:
+            detail = f"expected {value}" + (f" +/-{slack:.0f}" if slack else "") + f", got {response.value}"
+            return _verdict(False, expect, detail)
+
+    return _verdict(True, expect, f"got {response}")
+
+
+def _pwm_cleanup(mcu) -> None:
+    """Best-effort teardown so a part-way failure doesn't leave the group claimed."""
+    try:
+        mcu.pwm_group_release(PWM_GROUP)
+    except (LinkTimeout, ProtocolError):
+        pass
+
+
+def run_pwm_group_lifecycle(link, mcu) -> bool:
+    """
+    A group from cold to torn down: reading it before it exists, configuring it,
+    reading the frequency back, the refusal to reconfigure a live group, and the
+    release that puts it back where it started.
+    """
+    try:
+        results = [
+            check("pwm group get 1 - before any cfg", lambda: mcu.pwm_group_get(PWM_GROUP),
+                  Expect.NACK, reason=NOT_CONFIGURED),
+            check(f"pwm group cfg {PWM_FREQ_HZ} 1", lambda: mcu.pwm_group_cfg(PWM_FREQ_HZ, PWM_GROUP),
+                  Expect.ACK),
+            check("pwm group get 1 - reads back the frequency", lambda: mcu.pwm_group_get(PWM_GROUP),
+                  Expect.ACK, value=PWM_FREQ_HZ, tolerance=0.01),
+            check("pwm group cfg 2000 1 - reconfigure is refused, group keeps running",
+                  lambda: mcu.pwm_group_cfg(2000, PWM_GROUP), Expect.NACK, reason=NackReason.ERR_BUSY),
+            check("pwm group release 1", lambda: mcu.pwm_group_release(PWM_GROUP), Expect.ACK),
+            check("pwm group get 1 - teardown really happened", lambda: mcu.pwm_group_get(PWM_GROUP),
+                  Expect.NACK, reason=NOT_CONFIGURED),
+            check("pwm group release 1 - nothing left to release",
+                  lambda: mcu.pwm_group_release(PWM_GROUP), Expect.NACK, reason=NackReason.ERR_NOT_INIT),
+        ]
+    finally:
+        _pwm_cleanup(mcu)
+
+    return all(results)
+
+
+def run_pwm_channel_lifecycle(link, mcu) -> bool:
+    """
+    A channel from unclaimed to released. The two readbacks are the point: a
+    freshly claimed channel must sit at duty 0 (the protocol's "comes up silent"
+    rule), and a duty written then read back proves the 16-bit little-endian
+    value survives the round trip in both directions.
+    """
+    pin = f"{PWM_PORT.name} {PWM_PIN}"
+    try:
+        results = [
+            check(f"pwm group cfg {PWM_FREQ_HZ} 1", lambda: mcu.pwm_group_cfg(PWM_FREQ_HZ, PWM_GROUP),
+                  Expect.ACK),
+            check(f"pwm channel set {PWM_DUTY} {pin} - pin not claimed yet",
+                  lambda: mcu.pwm_channel_set(PWM_DUTY, PWM_PORT, PWM_PIN),
+                  Expect.NACK, reason=NOT_CONFIGURED),
+            check(f"pwm channel cfg high {pin}",
+                  lambda: mcu.pwm_channel_cfg(Polarity.ACTIVE_HIGH, PWM_PORT, PWM_PIN), Expect.ACK),
+            check(f"pwm channel get {pin} - comes up silent at duty 0",
+                  lambda: mcu.pwm_channel_get(PWM_PORT, PWM_PIN), Expect.ACK, value=0),
+            check(f"pwm channel set {PWM_DUTY} {pin}",
+                  lambda: mcu.pwm_channel_set(PWM_DUTY, PWM_PORT, PWM_PIN), Expect.ACK),
+            check(f"pwm channel get {pin} - reads back what was written",
+                  lambda: mcu.pwm_channel_get(PWM_PORT, PWM_PIN), Expect.ACK, value=PWM_DUTY),
+            check(f"pwm channel release {pin}",
+                  lambda: mcu.pwm_channel_release(PWM_PORT, PWM_PIN), Expect.ACK),
+            check(f"pwm channel set {PWM_DUTY} {pin} - release really happened",
+                  lambda: mcu.pwm_channel_set(PWM_DUTY, PWM_PORT, PWM_PIN),
+                  Expect.NACK, reason=NOT_CONFIGURED),
+            check("pwm group release 1", lambda: mcu.pwm_group_release(PWM_GROUP), Expect.ACK),
+        ]
+    finally:
+        _pwm_cleanup(mcu)
+
+    return all(results)
+
+
+def run_pwm_rejections(link, mcu) -> bool:
+    """
+    Out-of-range fields, sent as hand-built frames.
+
+    The client validates these locally and raises before anything reaches the
+    wire, so calling through it would only test the client. Unlike the malformed
+    frames in options 2-4 these are well formed - the parser accepts them and the
+    controller is what must refuse - so a NACK is the pass, not silence.
+    """
+    cases = [
+        ("pwm group cfg, GROUP = 3",
+         build_command(Opcode.PWM_GROUP_CFG, (PWM_FREQ_HZ).to_bytes(4, "little") + bytes([3])),
+         NackReason.ERR_INVALID_ARG),
+        ("pwm group cfg, FREQ = 0",
+         build_command(Opcode.PWM_GROUP_CFG, (0).to_bytes(4, "little") + bytes([PWM_GROUP])),
+         NackReason.ERR_INVALID_ARG),
+        ("pwm group cfg, FREQ above 1 MHz",
+         build_command(Opcode.PWM_GROUP_CFG, (1_000_001).to_bytes(4, "little") + bytes([PWM_GROUP])),
+         NackReason.ERR_INVALID_ARG),
+        ("pwm channel set, DUTY = 1001",
+         build_command(Opcode.PWM_SET, (1001).to_bytes(2, "little") + bytes([PWM_PORT, PWM_PIN])),
+         NackReason.ERR_INVALID_ARG),
+    ]
+
+    results = [send(link, name, frame, Expect.NACK, reason=reason) for name, frame, reason in cases]
+
+    results.append(check(f"pwm channel cfg high {UNMAPPED_PORT.name} {UNMAPPED_PIN} - no timer channel on this pin",
+                         lambda: mcu.pwm_channel_cfg(Polarity.ACTIVE_HIGH, UNMAPPED_PORT, UNMAPPED_PIN),
+                         Expect.NACK, reason=NackReason.ERR_UNSUPPORTED))
+    return all(results)
+
+
+def run_pwm_achieved_frequency(link, mcu, requested: int = 7000) -> bool:
+    """
+    The only test that exercises the prescaler/reload division on real silicon -
+    everything else about it runs against timer_spy. 7000 Hz does not divide the
+    170 MHz timer clock evenly, so the achieved figure is the interesting part.
+    """
+    try:
+        if not check(f"pwm group cfg {requested} 1", lambda: mcu.pwm_group_cfg(requested, PWM_GROUP),
+                     Expect.ACK):
+            return False
+
+        response = mcu.pwm_group_get(PWM_GROUP)
+        print(f"Sent [pwm group get 1]\n  <- {response}")
+        if not response.ack:
+            return _verdict(False, Expect.ACK, f"got {response}")
+
+        error_pct = abs(response.value - requested) / requested * 100
+        print(f"  requested {requested} Hz, achieved {response.value} Hz ({error_pct:.3f}% off)")
+        return _verdict(error_pct <= 1.0, Expect.ACK, f"achieved frequency is {error_pct:.3f}% off")
+    finally:
+        _pwm_cleanup(mcu)
+
+
+def run_pwm_fade_demo(link, mcu, step_delay_s: float = 0.01):
+    """
+    Ramps PA5 (TIM2_CH1, the Nucleo LED) from dark to full and back.
+
+    PA5 must not have been configured as a GPIO earlier in this session: a pin
+    already owned by the GPIO driver cannot be handed to PWM, and the protocol
+    has no command to release one. If this fails with ERR_BUSY, reset the board
+    and run it first.
+    """
+    print("NOTE: needs a board where PA5 was not already used by a gpio test this session.\n")
+
+    ramp = list(range(0, 1001, 20)) + list(range(1000, -1, -20))
+    accepted = step("pwm group cfg 1000 0", lambda: mcu.pwm_group_cfg(1000, 0))
+    accepted += step("pwm channel cfg high A 5",
+                     lambda: mcu.pwm_channel_cfg(Polarity.ACTIVE_HIGH, Port.A, LED_PIN))
+    sent = 2
+
+    if accepted == sent:
+        print(f"  ramping duty 0 -> 1000 -> 0 in {len(ramp)} steps...")
+        for duty in ramp:
+            try:
+                accepted += bool(mcu.pwm_channel_set(duty, Port.A, LED_PIN).ack)
+            except (LinkTimeout, ProtocolError):
+                pass
+            sent += 1
+            time.sleep(step_delay_s)
+
+    _pwm_cleanup(mcu)
+    try:
+        mcu.pwm_group_release(0)
+    except (LinkTimeout, ProtocolError):
+        pass
+
+    return _report_demo(accepted, sent, "the LED should have faded up and back down smoothly")
 
 
 def _report_demo(accepted: int, sent: int, watch_for: str) -> bool:
@@ -243,13 +474,25 @@ MENU_OPTIONS = {
 ACTIONS = {
     '5': ("Blink LED (PA5): cfg output, then toggle high/low", run_blink_led_test),
     '8': ("Bind button (PC13) both-edge -> toggle LED (PA5)", run_irq_bind_demo),
+    '13': ("Fade LED (PA5) with PWM - needs PA5 unused this session", run_pwm_fade_demo),
+}
+
+# Multi-step tests, judged entirely from the wire. Each takes (link, mcu) and
+# tears down whatever it configured, including when a step fails part-way.
+SEQUENCES = {
+    '9': ("PWM group lifecycle (group 1 / TIM3)", run_pwm_group_lifecycle),
+    '10': ("PWM channel lifecycle (PC6, with duty readback)", run_pwm_channel_lifecycle),
+    '11': ("PWM out-of-range fields are refused", run_pwm_rejections),
+    '12': ("PWM achieved vs requested frequency", run_pwm_achieved_frequency),
 }
 
 RUN_ALL_KEY = 'a'
-RUN_ALL_ORDER = ('1', '6', '7', '2', '3', '4')  # valid frames first, malformed last
+# Valid frames first, malformed next, then the PWM sequences - which use group 1
+# and PC6, so nothing above can leave state that upsets them.
+RUN_ALL_ORDER = ('1', '6', '7', '2', '3', '4')
 
 
-def run_all(link) -> bool:
+def run_all(link, mcu) -> bool:
     """Run every self-checking test in order and tally the result."""
     print("\nRunning all self-checking tests. The malformed frames wait out the "
           "response timeout each, so this is not instant.\n")
@@ -258,6 +501,11 @@ def run_all(link) -> bool:
     for key in RUN_ALL_ORDER:
         name, builder, expect = MENU_OPTIONS[key]
         results[name] = send(link, name, builder(), expect)
+        print()
+
+    for name, sequence in SEQUENCES.values():
+        print(f"--- {name} ---")
+        results[name] = sequence(link, mcu)
         print()
 
     passed = sum(results.values())
@@ -273,11 +521,13 @@ def print_menu():
     """Frames and demos are held in separate dicts, so merge them to list in key order."""
     entries = {key: (name, f"[expects {expect.name}]")
                for key, (name, _builder, expect) in MENU_OPTIONS.items()}
+    entries.update({key: (name, "[sequence, self-checking]")
+                    for key, (name, _sequence) in SEQUENCES.items()})
     entries.update({key: (name, "[demo, confirm visually]")
                     for key, (name, _action) in ACTIONS.items()})
 
     print("\nSelect a frame to send:")
-    for key in sorted(entries):
+    for key in sorted(entries, key=lambda k: (0, int(k), "") if k.isdigit() else (1, 0, k)):
         name, tag = entries[key]
         print(f"  {key}) {name}  {tag}")
     print(f"  {RUN_ALL_KEY}) Run all self-checking tests")
@@ -322,7 +572,13 @@ def main(argv=None):
                 break
 
             if choice == RUN_ALL_KEY:
-                failures += not run_all(link)
+                failures += not run_all(link, mcu)
+                continue
+
+            sequence = SEQUENCES.get(choice)
+            if sequence is not None:
+                _name, sequence_fn = sequence
+                failures += not sequence_fn(link, mcu)
                 continue
 
             option = MENU_OPTIONS.get(choice)
@@ -334,7 +590,7 @@ def main(argv=None):
             action = ACTIONS.get(choice)
             if action is not None:
                 _name, action_fn = action
-                failures += not action_fn(mcu)
+                failures += not (action_fn(link, mcu) if choice == '13' else action_fn(mcu))
                 continue
 
             print("Not a valid choice, try again.")
