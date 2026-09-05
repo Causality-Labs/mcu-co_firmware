@@ -186,19 +186,14 @@ static void timer_load_shadow_if_stopped(TIM_TypeDef *timer)
     }
 }
 
-status_t timer_init(timer_instance_t instance, const timer_config_t *config)
+status_t timer_init(timer_instance_t instance, uint32_t frequency_hz)
 {
     if (instance >= TIMER_INSTANCE_COUNT)
     {
         return STATUS_ERR_INVALID_ARG;
     }
 
-    if (config == NULL)
-    {
-        return STATUS_ERR_INVALID_ARG;
-    }
-
-    if ((config->frequency_hz < TIMER_FREQ_MIN_HZ) || (config->frequency_hz > TIMER_FREQ_MAX_HZ))
+    if ((frequency_hz < TIMER_FREQ_MIN_HZ) || (frequency_hz > TIMER_FREQ_MAX_HZ))
     {
         return STATUS_ERR_INVALID_ARG;
     }
@@ -217,7 +212,7 @@ status_t timer_init(timer_instance_t instance, const timer_config_t *config)
     uint16_t psc = 0U;
     uint16_t arr = 0U;
 
-    status_t status = timer_compute_timebase(clk_hz, config->frequency_hz, &psc, &arr);
+    status_t status = timer_compute_timebase(clk_hz, frequency_hz, &psc, &arr);
     if (status != STATUS_OK)
     {
         return status;

@@ -1,15 +1,14 @@
 #include <stdlib.h>
 #include "frame_parser.h"
 
-#define TX_HEADER_LEN      2U
-#define TX_BODY_NO_STATE   1U
-#define TX_BODY_WITH_STATE 2U
+#define TX_HEADER_LEN 2U
+#define TX_ACK_LEN    1U
 
 #define SOF_BYTE 0xA5
 
 #define CRC_SIZE 2U
 
-frame_results_t frame_parser_feed(frame_t *frame, uint8_t data_byte)
+frame_results_t frame_parser_feed(command_frame_t *frame, uint8_t data_byte)
 {
     if (frame == NULL)
     {
@@ -91,7 +90,7 @@ frame_results_t frame_parser_feed(frame_t *frame, uint8_t data_byte)
     return FRAME_READY;
 }
 
-int frame_parser_serialize(frame_t *frame, uint8_t *serialized_frame_buffer, uint8_t serialized_frame_size)
+int frame_parser_serialize(command_frame_t *frame, uint8_t *serialized_frame_buffer, uint8_t serialized_frame_size)
 {
     if (frame == NULL || serialized_frame_buffer == NULL)
     {
@@ -122,7 +121,7 @@ int frame_parser_serialize(frame_t *frame, uint8_t *serialized_frame_buffer, uin
     return size;
 }
 
-int frame_parser_get_crc(frame_t *frame, uint16_t *crc)
+int frame_parser_get_crc(command_frame_t *frame, uint16_t *crc)
 {
     if (frame == NULL || crc == NULL)
     {
@@ -134,14 +133,20 @@ int frame_parser_get_crc(frame_t *frame, uint16_t *crc)
     return 0;
 }
 
-int frame_parser_serialize_response(response_t *response, uint8_t *serialized_response, uint8_t serialized_response_size)
+int frame_parser_serialize_response(response_frame_t *response, uint8_t *serialized_response,
+                                    uint8_t serialized_response_size)
 {
     if (response == NULL || serialized_response == NULL)
     {
         return -1;
     }
 
-    uint8_t body_len  = response->has_state ? TX_BODY_WITH_STATE : TX_BODY_NO_STATE;
+    if (response->data_len > TX_DATA_MAX)
+    {
+        return -1;
+    }
+
+    uint8_t body_len  = (uint8_t)(TX_ACK_LEN + response->data_len);
     uint8_t frame_len = (uint8_t)(TX_HEADER_LEN + body_len);
 
     if (serialized_response_size < frame_len)
@@ -153,15 +158,14 @@ int frame_parser_serialize_response(response_t *response, uint8_t *serialized_re
     serialized_response[TX_LEN_IDX] = body_len;
     serialized_response[TX_ACK_IDX] = response->ack ? 1U : 0U;
 
-    if (response->has_state == true)
+    for (uint8_t i = 0U; i < response->data_len; i++)
     {
-        serialized_response[TX_STATE_IDX] = response->state;
+        serialized_response[TX_DATA_IDX + i] = response->data[i];
     }
 
     return (int)frame_len;
 }
 
-//
 int frame_parser_append_crc(uint8_t *serialized_frame_buffer, uint8_t current_length, uint8_t buffer_size, uint16_t crc)
 {
     if (serialized_frame_buffer == NULL)

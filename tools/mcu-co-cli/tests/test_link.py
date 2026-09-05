@@ -52,23 +52,23 @@ class ReadResponse(unittest.TestCase):
     # A clean 5-byte ACK decodes straight through.
     def test_DecodesBareAck(self):
         link = McuCoLink.from_stream(FakeSerial(frame("A5 01 01 1F 3E")))
-        self.assertEqual(link.read_response(), Response(ack=True, state=None))
+        self.assertEqual(link.read_response(), Response(ack=True))
 
     # A 6-byte GPIO_READ reply is read to its longer length, not cut at 5.
     def test_DecodesSixByteReadResponse(self):
         link = McuCoLink.from_stream(FakeSerial(frame("A5 02 01 01 EC 81")))
-        self.assertEqual(link.read_response(), Response(ack=True, state=1))
+        self.assertEqual(link.read_response(), Response(ack=True, data=bytes([1])))
 
     # Leading garbage before SOF is discarded rather than corrupting the frame.
     def test_ResyncsPastLeadingGarbage(self):
         link = McuCoLink.from_stream(FakeSerial(frame("DE AD BE EF A5 01 01 1F 3E")))
-        self.assertEqual(link.read_response(), Response(ack=True, state=None))
+        self.assertEqual(link.read_response(), Response(ack=True))
 
     # Back-to-back replies are consumed one exchange at a time, in order.
     def test_ReadsConsecutiveResponsesIndependently(self):
         link = McuCoLink.from_stream(FakeSerial(frame("A5 01 01 1F 3E") + frame("A5 01 00 3E 2E")))
-        self.assertEqual(link.read_response(), Response(ack=True, state=None))
-        self.assertEqual(link.read_response(), Response(ack=False, state=None))
+        self.assertEqual(link.read_response(), Response(ack=True))
+        self.assertEqual(link.read_response(), Response(ack=False))
 
     # Silence is the firmware's answer to a CRC/framing error, so it must not hang.
     def test_RaisesTimeoutOnSilence(self):
@@ -104,7 +104,7 @@ class Send(unittest.TestCase):
         link = McuCoLink.from_stream(stream)
         response = link.send(frame("A5 35 02 00 05 A9 2A"))
         self.assertEqual(bytes(stream.written), frame("A5 35 02 00 05 A9 2A"))
-        self.assertEqual(response, Response(ack=True, state=None))
+        self.assertEqual(response, Response(ack=True))
 
     # Stale bytes from an abandoned exchange are flushed before a new command.
     def test_ClearsInputBufferBeforeWriting(self):
@@ -118,7 +118,7 @@ class Send(unittest.TestCase):
         link = McuCoLink.from_stream(stream)
         response = link.send_command(Opcode.GPIO_READ, bytes([Port.A, 5]))
         self.assertEqual(bytes(stream.written), frame("A5 32 02 00 05 84 7B"))
-        self.assertEqual(response, Response(ack=True, state=1))
+        self.assertEqual(response, Response(ack=True, data=bytes([1])))
 
 
 # --- open / close ---
@@ -132,7 +132,7 @@ class Lifecycle(unittest.TestCase):
     # from_stream() is already usable, and the context manager leaves it so.
     def test_ContextManagerYieldsUsableLink(self):
         with McuCoLink.from_stream(FakeSerial(frame("A5 01 01 1F 3E"))) as link:
-            self.assertEqual(link.read_response(), Response(ack=True, state=None))
+            self.assertEqual(link.read_response(), Response(ack=True))
 
 
 if __name__ == "__main__":

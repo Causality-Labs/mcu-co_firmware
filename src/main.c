@@ -12,7 +12,6 @@
 
 #define MODULE_NAME "MAIN"
 
-// const gpio_pin_t led                            = {.port = GPIO_PORT_A, .pin = (uint8_t)5U};
 static const uart_instance_t commands_transport = UART_INSTANCE_USART2;
 
 void button_ISR(void);
@@ -51,9 +50,9 @@ int main(void)
     LOG_DEBUG(MODULE_NAME, "logger initialised");
 
     LOG_INFO(MODULE_NAME, "entering main loop");
-    uint8_t data_byte = 0;
-    frame_t frame     = {0};
-    frame.state       = SOF;
+    uint8_t data_byte     = 0;
+    command_frame_t frame = {0};
+    frame.state           = SOF;
 
     uint8_t serialized_frame[2 + RX_MAX_PAYLOAD] = {0};
     uint8_t serialized_frame_buffer_size         = 2 + RX_MAX_PAYLOAD;
@@ -94,8 +93,8 @@ int main(void)
 
                 /* {0} leaves ack false, so this is already a valid NACK if
                  * dispatch_command() returns before populating it. */
-                response_t resp      = {0};
-                status_t disp_status = dispatch_command(&frame, &resp);
+                response_frame_t resp = {0};
+                status_t disp_status  = dispatch_command(&frame, &resp);
 
                 if (disp_status != STATUS_OK)
                 {

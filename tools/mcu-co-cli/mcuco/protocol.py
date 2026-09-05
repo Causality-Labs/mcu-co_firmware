@@ -6,7 +6,7 @@ Everything here is bytes in, objects out, so it can be exercised on a host
 with no board attached.
 
     command   SOF . OPCODE . LEN . PAYLOAD . CRC_L . CRC_H
-    response  SOF . LEN . ACK/NACK [ . STATE ] . CRC_L . CRC_H
+    response  SOF . LEN . ACK/NACK [ . DATA ] . CRC_L . CRC_H
 
 CRC16 is CCITT-FALSE (poly 0x1021, init 0xFFFF, no reflect, no xorout) over
 everything except SOF and the CRC bytes themselves.
@@ -21,6 +21,11 @@ MAX_PAYLOAD = 32  # RX_MAX_PAYLOAD in frame_parser.h
 RESPONSE_HEADER_LEN = 2  # SOF + LEN, read before the rest of the frame is sized
 CRC_LEN = 2
 
+# Widest response DATA the protocol defines: PWM_GROUP_GET's uint32 frequency.
+# TX_DATA_MAX in frame_parser.h.
+MAX_RESPONSE_DATA = 4
+MAX_RESPONSE_LEN = 1 + MAX_RESPONSE_DATA  # LEN counts the ACK/NACK byte too
+
 
 class Opcode(IntEnum):
     GPIO_CFG = 0x30
@@ -29,6 +34,33 @@ class Opcode(IntEnum):
     GPIO_IRQ_BIND = 0x33
     GPIO_IRQ_CFG = 0x34
     GPIO_IRQ_UNBIND = 0x35
+    PWM_GROUP_CFG = 0x40
+    PWM_CFG = 0x41
+    PWM_SET = 0x42
+    PWM_RELEASE = 0x43
+    PWM_GET = 0x44
+    PWM_GROUP_GET = 0x45
+    PWM_GROUP_RELEASE = 0x46
+
+
+class Polarity(IntEnum):
+    """The level held during the active part of a PWM period."""
+
+    ACTIVE_HIGH = 0
+    ACTIVE_LOW = 1
+
+
+class NackReason(IntEnum):
+    """The firmware's own status_t values, sent verbatim as a NACK's DATA byte."""
+
+    ERR = 0x01
+    ERR_INVALID_ARG = 0x02
+    ERR_INVALID_PIN = 0x03
+    ERR_INVALID_STATE = 0x04
+    ERR_NOT_INIT = 0x05
+    ERR_BUSY = 0x06
+    ERR_TIMEOUT = 0x07
+    ERR_UNSUPPORTED = 0x08
 
 
 class Port(IntEnum):
@@ -96,14 +128,47 @@ def build_command(opcode: int, payload: bytes = b"") -> bytes:
 
 @dataclass(frozen=True)
 class Response:
+    """
+    A decoded response frame.
+
+    DATA means one of two things and the ACK/NACK byte is what tells them
+    apart: on an ACK it is the value a read command returned, width fixed per
+    opcode; on a NACK it is always a single reason code. `data` is kept raw
+    because LEN, not the opcode, is what sizes the frame - so this stays
+    decodable without knowing which command was sent.
+    """
+
     ack: bool
-    state: int | None = None  # GPIO_READ only; None when the frame carried no STATE
+    data: bytes = b""
+
+    @property
+    def value(self) -> int | None:
+        """The value a read returned, decoded little-endian. None unless a successful read."""
+        if not self.ack or not self.data:
+            return None
+        return int.from_bytes(self.data, "little")
+
+    @property
+    def reason(self) -> NackReason | int | None:
+        """Why the command failed. None on an ACK; the raw byte if the code is unknown."""
+        if self.ack or not self.data:
+            return None
+        try:
+            return NackReason(self.data[0])
+        except ValueError:
+            return self.data[0]
 
     def __str__(self) -> str:
-        verdict = "ACK" if self.ack else "NACK"
-        if self.state is None:
-            return verdict
-        return f"{verdict} state={self.state} ({'high' if self.state else 'low'})"
+        if not self.ack:
+            reason = self.reason
+            if reason is None:
+                return "NACK"
+            name = reason.name if isinstance(reason, NackReason) else f"0x{reason:02X}"
+            return f"NACK reason={name}"
+
+        if not self.data:
+            return "ACK"
+        return f"ACK value={self.value}"
 
 
 def response_frame_len(length_byte: int) -> int:
@@ -116,8 +181,8 @@ def parse_response(raw: bytes) -> Response:
     Decode a complete response frame.
 
     Raises ProtocolError on a bad SOF, an unexpected LEN, a truncated frame, or
-    a CRC mismatch. The MCU only ever emits LEN 1 (bare ACK/NACK) or LEN 2
-    (GPIO_READ, which appends STATE).
+    a CRC mismatch. LEN runs from 1 (bare ACK) to MAX_RESPONSE_LEN, which is
+    PWM_GROUP_GET's 4-byte frequency plus the ACK byte.
     """
     if len(raw) < response_frame_len(1):
         raise ProtocolError(f"response too short: {len(raw)} bytes")
@@ -126,8 +191,8 @@ def parse_response(raw: bytes) -> Response:
         raise ProtocolError(f"bad SOF: expected 0x{SOF:02X}, got 0x{raw[0]:02X}")
 
     length = raw[1]
-    if length not in (1, 2):
-        raise ProtocolError(f"bad LEN: expected 1 or 2, got {length}")
+    if not 1 <= length <= MAX_RESPONSE_LEN:
+        raise ProtocolError(f"bad LEN: expected 1 to {MAX_RESPONSE_LEN}, got {length}")
 
     expected = response_frame_len(length)
     if len(raw) < expected:
@@ -140,5 +205,5 @@ def parse_response(raw: bytes) -> Response:
         raise ProtocolError(f"CRC mismatch: computed 0x{computed_crc:04X}, received 0x{received_crc:04X}")
 
     ack = bool(raw[2])
-    state = raw[3] if length == 2 else None
-    return Response(ack=ack, state=state)
+    data = bytes(raw[3 : 2 + length])
+    return Response(ack=ack, data=data)

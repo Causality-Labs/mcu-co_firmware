@@ -1,16 +1,18 @@
 #include "CppUTest/TestHarness.h"
+#include <string.h>
 
-extern "C" {
+extern "C"
+{
 #include "frame_parser.h"
 }
 
 TEST_GROUP(FrameParser)
 {
-    frame_t frame;
+    command_frame_t frame;
 
     void setup() override
     {
-        frame = frame_t(); // zero-initializes every field, including state = SOF (0)
+        frame = command_frame_t(); // zero-initializes every field, including state = SOF (0)
     }
 };
 
@@ -170,8 +172,8 @@ TEST(FrameParser, SerializeRejectsBufferTooSmall)
 // documented indices, and the returned size should equal 2 + length.
 TEST(FrameParser, SerializeWritesOpcodeLengthAndPayloadCorrectly)
 {
-    frame.opcode    = 0x10;
-    frame.length    = 3;
+    frame.opcode     = 0x10;
+    frame.length     = 3;
     frame.payload[0] = 0xAA;
     frame.payload[1] = 0xBB;
     frame.payload[2] = 0xCC;
@@ -191,52 +193,71 @@ TEST(FrameParser, SerializeWritesOpcodeLengthAndPayloadCorrectly)
 // NULL response or NULL output buffer should both be rejected.
 TEST(FrameParser, SerializeResponseRejectsNullResponseOrBuffer)
 {
-    response_t resp = response_t();
-    uint8_t buf[6]; // SOF + LEN + ACK/NACK + STATE + CRC_L + CRC_H
+    response_frame_t resp = response_frame_t();
+    uint8_t buf[TX_FRAME_MAX]; // SOF + LEN + ACK/NACK + up to TX_DATA_MAX data + CRC_L + CRC_H
 
     LONGS_EQUAL(-1, frame_parser_serialize_response(NULL, buf, sizeof(buf)));
     LONGS_EQUAL(-1, frame_parser_serialize_response(&resp, NULL, sizeof(buf)));
 }
 
 // A buffer too small to hold the frame should be rejected rather than
-// overflowed. The size needed depends on has_state, so a fixed requirement
-// would pass one of these two and fail the other.
+// overflowed. The size needed depends on data_len, so a fixed requirement
+// would pass one of these and fail the others.
 TEST(FrameParser, SerializeResponseRejectsBufferTooSmall)
 {
-    response_t resp = response_t();
-    resp.ack        = true;
+    response_frame_t resp = response_frame_t();
+    resp.ack              = true;
 
-    uint8_t buf[6] = {0}; // oversized on purpose - a buggy write lands here, not on the stack
+    uint8_t buf[TX_FRAME_MAX] = {0}; // oversized on purpose - a buggy write lands here, not on the stack
 
     LONGS_EQUAL(-1, frame_parser_serialize_response(&resp, buf, 2)); // needs 3: SOF + LEN + ACK
 
-    resp.has_state = true;
-    LONGS_EQUAL(-1, frame_parser_serialize_response(&resp, buf, 3)); // needs 4: + STATE
+    resp.data_len = 1;
+    LONGS_EQUAL(-1, frame_parser_serialize_response(&resp, buf, 3)); // needs 4: + 1 data byte
+
+    resp.data_len = 4;
+    LONGS_EQUAL(-1, frame_parser_serialize_response(&resp, buf, 6)); // needs 7: + 4 data bytes
 }
 
 // A buffer of exactly the needed size must be accepted - the off-by-one
 // counterpart to the too-small test, and it pins the returned byte count.
 TEST(FrameParser, SerializeResponseAcceptsBufferThatFitsExactly)
 {
-    response_t resp = response_t();
-    resp.ack        = true;
+    response_frame_t resp = response_frame_t();
+    resp.ack              = true;
 
-    uint8_t buf[6] = {0};
+    uint8_t buf[TX_FRAME_MAX] = {0};
 
     LONGS_EQUAL(3, frame_parser_serialize_response(&resp, buf, 3));
 
-    resp.has_state = true;
+    resp.data_len = 1;
     LONGS_EQUAL(4, frame_parser_serialize_response(&resp, buf, 4));
+
+    resp.data_len = 4;
+    LONGS_EQUAL(7, frame_parser_serialize_response(&resp, buf, 7));
+}
+
+// A data_len past the size of the data array must be rejected, not trusted:
+// it is the only field that can drive the copy length out of bounds.
+TEST(FrameParser, SerializeResponseRejectsDataLenAboveMax)
+{
+    response_frame_t resp = response_frame_t();
+    resp.ack              = true;
+    resp.data_len         = TX_DATA_MAX + 1;
+
+    uint8_t buf[TX_FRAME_MAX] = {0};
+
+    LONGS_EQUAL(-1, frame_parser_serialize_response(&resp, buf, sizeof(buf)));
 }
 
 // Happy path for a bare ACK: SOF, LEN counting only the body byte, then the
 // ACK byte itself - A5 01 01 on the wire.
 TEST(FrameParser, SerializeResponseWritesBareAckBytes)
 {
-    response_t resp = response_t();
-    resp.ack        = true;
+    response_frame_t resp = response_frame_t();
+    resp.ack              = true;
 
-    uint8_t buf[6] = {0};
+    uint8_t buf[TX_FRAME_MAX] = {0};
     LONGS_EQUAL(3, frame_parser_serialize_response(&resp, buf, sizeof(buf)));
 
     BYTES_EQUAL(0xA5, buf[TX_SOF_IDX]);
@@ -250,10 +271,11 @@ TEST(FrameParser, SerializeResponseWritesBareAckBytes)
 // from "never wrote anything".
 TEST(FrameParser, SerializeResponseWritesBareNackBytes)
 {
-    response_t resp = response_t();
-    resp.ack        = false;
+    response_frame_t resp = response_frame_t();
+    resp.ack              = false;
 
-    uint8_t buf[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    uint8_t buf[TX_FRAME_MAX];
+    memset(buf, 0xFF, sizeof(buf));
     LONGS_EQUAL(3, frame_parser_serialize_response(&resp, buf, sizeof(buf)));
 
     BYTES_EQUAL(0xA5, buf[TX_SOF_IDX]);
@@ -261,46 +283,73 @@ TEST(FrameParser, SerializeResponseWritesBareNackBytes)
     BYTES_EQUAL(0x00, buf[TX_ACK_IDX]);
 }
 
-// has_state makes LEN 2 and appends the STATE byte - A5 02 01 01 on the wire.
-// The second case uses state=0 with ack=1 so a STATE byte accidentally sourced
-// from the ack flag can't pass.
-TEST(FrameParser, SerializeResponseWritesStateByteWhenHasStateSet)
+// A single data byte (GPIO_READ's pin state) makes LEN 2 and appends it -
+// A5 02 01 01 on the wire. The second case uses data 0 with ack 1 so a data
+// byte accidentally sourced from the ack flag can't pass.
+TEST(FrameParser, SerializeResponseWritesOneDataByte)
 {
-    response_t resp = response_t();
-    resp.ack        = true;
-    resp.state      = 1;
-    resp.has_state  = true;
+    response_frame_t resp = response_frame_t();
+    resp.ack              = true;
+    resp.data[0]          = 1;
+    resp.data_len         = 1;
 
-    uint8_t buf[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    uint8_t buf[TX_FRAME_MAX];
+    memset(buf, 0xFF, sizeof(buf));
     LONGS_EQUAL(4, frame_parser_serialize_response(&resp, buf, sizeof(buf)));
 
     BYTES_EQUAL(0xA5, buf[TX_SOF_IDX]);
-    BYTES_EQUAL(0x02, buf[TX_LEN_IDX]); // ACK + STATE
+    BYTES_EQUAL(0x02, buf[TX_LEN_IDX]); // ACK + one data byte
     BYTES_EQUAL(0x01, buf[TX_ACK_IDX]);
-    BYTES_EQUAL(0x01, buf[TX_STATE_IDX]);
+    BYTES_EQUAL(0x01, buf[TX_DATA_IDX]);
 
-    resp.state = 0;
+    resp.data[0] = 0;
     LONGS_EQUAL(4, frame_parser_serialize_response(&resp, buf, sizeof(buf)));
 
     BYTES_EQUAL(0x01, buf[TX_ACK_IDX]);
-    BYTES_EQUAL(0x00, buf[TX_STATE_IDX]);
+    BYTES_EQUAL(0x00, buf[TX_DATA_IDX]);
 }
 
-// state is populated but has_state is clear, so the 4th byte must be left
-// alone. Writing it anyway emits A5 01 01 00 - LEN claims one body byte while
-// two follow, and the host reads the stray byte as CRC_L and desyncs.
-TEST(FrameParser, SerializeResponseLeavesFourthByteUntouchedWhenNoState)
+// A multi-byte payload (PWM_GROUP_GET's 32-bit frequency) must land in order
+// and set LEN to 1 + data_len - A5 05 01 E8 03 00 00 on the wire.
+TEST(FrameParser, SerializeResponseWritesMultipleDataBytesInOrder)
 {
-    response_t resp = response_t();
-    resp.ack        = true;
-    resp.state      = 1;
-    resp.has_state  = false;
+    response_frame_t resp = response_frame_t();
+    resp.ack              = true;
+    resp.data[0]          = 0xE8;
+    resp.data[1]          = 0x03;
+    resp.data[2]          = 0x00;
+    resp.data[3]          = 0x00;
+    resp.data_len         = 4;
 
-    uint8_t buf[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    uint8_t buf[TX_FRAME_MAX];
+    memset(buf, 0xFF, sizeof(buf));
+    LONGS_EQUAL(7, frame_parser_serialize_response(&resp, buf, sizeof(buf)));
+
+    BYTES_EQUAL(0xA5, buf[TX_SOF_IDX]);
+    BYTES_EQUAL(0x05, buf[TX_LEN_IDX]); // ACK + four data bytes
+    BYTES_EQUAL(0x01, buf[TX_ACK_IDX]);
+    BYTES_EQUAL(0xE8, buf[TX_DATA_IDX + 0]);
+    BYTES_EQUAL(0x03, buf[TX_DATA_IDX + 1]);
+    BYTES_EQUAL(0x00, buf[TX_DATA_IDX + 2]);
+    BYTES_EQUAL(0x00, buf[TX_DATA_IDX + 3]);
+}
+
+// data is populated but data_len is 0, so the 4th byte must be left alone.
+// Writing it anyway emits A5 01 01 00 - LEN claims one body byte while two
+// follow, and the host reads the stray byte as CRC_L and desyncs.
+TEST(FrameParser, SerializeResponseLeavesDataByteUntouchedWhenDataLenZero)
+{
+    response_frame_t resp = response_frame_t();
+    resp.ack              = true;
+    resp.data[0]          = 1;
+    resp.data_len         = 0;
+
+    uint8_t buf[TX_FRAME_MAX];
+    memset(buf, 0xFF, sizeof(buf));
     LONGS_EQUAL(3, frame_parser_serialize_response(&resp, buf, sizeof(buf)));
 
     BYTES_EQUAL(0x01, buf[TX_LEN_IDX]);
-    BYTES_EQUAL(0xFF, buf[TX_STATE_IDX]);
+    BYTES_EQUAL(0xFF, buf[TX_DATA_IDX]);
 }
 
 /* --- frame_parser_append_crc --- */
@@ -340,7 +389,7 @@ TEST(FrameParser, AppendCrcWritesLowByteThenHighByte)
 // Appending must only touch the two bytes at current_length. The frame already
 // serialized ahead of it stays byte-for-byte intact - overwrite any of it and
 // the CRC no longer matches the bytes the host receives - and nothing lands
-// past the CRC either. Uses the 4-byte with-state vector: A5 02 01 01 EC 81.
+// past the CRC either. Uses the 4-byte one-data-byte vector: A5 02 01 01 EC 81.
 TEST(FrameParser, AppendCrcLeavesSurroundingBytesUntouched)
 {
     uint8_t buf[6] = {0xA5, 0x02, 0x01, 0x01, 0xFF, 0xFF};
@@ -350,7 +399,7 @@ TEST(FrameParser, AppendCrcLeavesSurroundingBytesUntouched)
     BYTES_EQUAL(0xA5, buf[TX_SOF_IDX]);
     BYTES_EQUAL(0x02, buf[TX_LEN_IDX]);
     BYTES_EQUAL(0x01, buf[TX_ACK_IDX]);
-    BYTES_EQUAL(0x01, buf[TX_STATE_IDX]);
+    BYTES_EQUAL(0x01, buf[TX_DATA_IDX]);
 
     BYTES_EQUAL(0xEC, buf[4]);
     BYTES_EQUAL(0x81, buf[5]);

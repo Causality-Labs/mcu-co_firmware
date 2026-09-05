@@ -5,6 +5,6 @@
 #include "status.h"
 #include "frame_parser.h"
 
-status_t dispatch_command(frame_t *frame, response_t *resp);
+status_t dispatch_command(command_frame_t *frame, response_frame_t *resp);
 
 #endif /* COMMAND_DISPATCHER_H */

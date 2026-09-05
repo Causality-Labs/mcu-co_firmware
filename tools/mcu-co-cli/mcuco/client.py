@@ -15,9 +15,13 @@ was wrong.
 """
 
 from .link import McuCoLink
-from .protocol import Action, Dir, Edge, Level, Opcode, Port, Response
+from .protocol import Action, Dir, Edge, Level, Opcode, Polarity, Port, Response
 
 PIN_MAX = 15
+GROUP_MAX = 2  # three frequency groups: TIM2, TIM3, TIM4
+DUTY_MAX = 1000  # tenths of a percent, so 1000 is 100.0%
+FREQ_MIN = 1
+FREQ_MAX = 1_000_000
 
 
 def _port(value, name: str = "port") -> int:
@@ -33,6 +37,31 @@ def _pin(value, name: str = "pin") -> int:
         raise ValueError(f"{name}: {value!r} is not an integer pin number")
     if not 0 <= value <= PIN_MAX:
         raise ValueError(f"{name}: {value} out of range (expected 0-{PIN_MAX})")
+    return value
+
+
+def _group(value) -> int:
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ValueError(f"group: {value!r} is not an integer group number")
+    if not 0 <= value <= GROUP_MAX:
+        raise ValueError(f"group: {value} out of range (expected 0-{GROUP_MAX})")
+    return value
+
+
+def _duty(value) -> int:
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ValueError(f"duty: {value!r} is not an integer duty")
+    if not 0 <= value <= DUTY_MAX:
+        raise ValueError(f"duty: {value} out of range (expected 0-{DUTY_MAX}, tenths of a percent)")
+    return value
+
+
+def _frequency(value) -> int:
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ValueError(f"freq_hz: {value!r} is not an integer frequency")
+    if not FREQ_MIN <= value <= FREQ_MAX:
+        raise ValueError(f"freq_hz: {value} out of range (expected {FREQ_MIN}-{FREQ_MAX} Hz). "
+                         "0 is not shorthand for teardown - use pwm_group_release()")
     return value
 
 
@@ -84,7 +113,7 @@ class McuCo:
         return self._send(Opcode.GPIO_WRITE, payload)
 
     def gpio_get(self, port, pin) -> Response:
-        """gpio get <port> <pin> — response carries the pin level in .state"""
+        """gpio get <port> <pin> — response carries the pin level in .value"""
         payload = bytes([_port(port), _pin(pin)])
         return self._send(Opcode.GPIO_READ, payload)
 
@@ -108,3 +137,41 @@ class McuCo:
         """gpio irq unbind <port> <pin> — drop the binding, leave the trigger armed"""
         payload = bytes([_port(port), _pin(pin)])
         return self._send(Opcode.GPIO_IRQ_UNBIND, payload)
+
+    def pwm_group_cfg(self, freq_hz, group) -> Response:
+        """pwm group cfg <freq_hz> <group> — bring a group up and start its counter
+
+        NACKs with ERR_BUSY if the group is already configured; release it first.
+        """
+        payload = _frequency(freq_hz).to_bytes(4, "little") + bytes([_group(group)])
+        return self._send(Opcode.PWM_GROUP_CFG, payload)
+
+    def pwm_group_release(self, group) -> Response:
+        """pwm group release <group> — stop the counter and free all four channels"""
+        return self._send(Opcode.PWM_GROUP_RELEASE, bytes([_group(group)]))
+
+    def pwm_group_get(self, group) -> Response:
+        """pwm group get <group> — response carries the achieved frequency in .value
+
+        The achieved frequency differs from the requested one wherever the
+        prescaler and reload cannot divide the timer clock exactly.
+        """
+        return self._send(Opcode.PWM_GROUP_GET, bytes([_group(group)]))
+
+    def pwm_channel_cfg(self, polarity, port, pin) -> Response:
+        """pwm channel cfg high|low <port> <pin> — claim a pin, silent at duty 0"""
+        payload = bytes([_enum(Polarity, polarity, "polarity"), _port(port), _pin(pin)])
+        return self._send(Opcode.PWM_CFG, payload)
+
+    def pwm_channel_set(self, duty, port, pin) -> Response:
+        """pwm channel set <duty> <port> <pin> — duty in tenths of a percent, 0-1000"""
+        payload = _duty(duty).to_bytes(2, "little") + bytes([_port(port), _pin(pin)])
+        return self._send(Opcode.PWM_SET, payload)
+
+    def pwm_channel_release(self, port, pin) -> Response:
+        """pwm channel release <port> <pin> — free one pin, leaving the group running"""
+        return self._send(Opcode.PWM_RELEASE, bytes([_port(port), _pin(pin)]))
+
+    def pwm_channel_get(self, port, pin) -> Response:
+        """pwm channel get <port> <pin> — response carries the duty in .value"""
+        return self._send(Opcode.PWM_GET, bytes([_port(port), _pin(pin)]))

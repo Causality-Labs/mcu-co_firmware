@@ -15,6 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from mcuco.protocol import (  # noqa: E402
+    NackReason,
     MAX_PAYLOAD,
     Action,
     Dir,
@@ -108,10 +109,12 @@ class BuildCommand(unittest.TestCase):
 # --- response_frame_len ---
 
 class ResponseFrameLen(unittest.TestCase):
-    # LEN=1 is a bare ACK/NACK: 5 bytes on the wire; LEN=2 adds STATE.
-    def test_SizesBareAndStateCarryingResponses(self):
+    # LEN=1 is a bare ACK/NACK: 5 bytes on the wire. Each DATA byte adds one,
+    # up to LEN=5 for PWM_GROUP_GET's 4-byte frequency.
+    def test_SizesResponsesByTheirDataWidth(self):
         self.assertEqual(response_frame_len(1), 5)
         self.assertEqual(response_frame_len(2), 6)
+        self.assertEqual(response_frame_len(5), 9)
 
 
 # --- parse_response ---
@@ -119,15 +122,38 @@ class ResponseFrameLen(unittest.TestCase):
 class ParseResponse(unittest.TestCase):
     # The doc's bare ACK decodes with no STATE field.
     def test_DecodesDocAck(self):
-        self.assertEqual(parse_response(frame("A5 01 01 1F 3E")), Response(ack=True, state=None))
+        self.assertEqual(parse_response(frame("A5 01 01 1F 3E")), Response(ack=True))
 
     # The doc's bare NACK decodes as a failure with no STATE field.
     def test_DecodesDocNack(self):
-        self.assertEqual(parse_response(frame("A5 01 00 3E 2E")), Response(ack=False, state=None))
+        self.assertEqual(parse_response(frame("A5 01 00 3E 2E")), Response(ack=False))
 
     # The doc's GPIO_READ response carries the pin level in STATE.
     def test_DecodesDocReadResponseWithState(self):
-        self.assertEqual(parse_response(frame("A5 02 01 01 EC 81")), Response(ack=True, state=1))
+        self.assertEqual(parse_response(frame("A5 02 01 01 EC 81")), Response(ack=True, data=bytes([1])))
+
+    # PWM_GET acks with a 2-byte little-endian duty (375 = 0x0177), so LEN is 3.
+    def test_DecodesTwoByteReadData(self):
+        self.assertEqual(parse_response(frame("A5 03 01 77 01 C3 A9")), Response(ack=True, data=bytes([0x77, 0x01])))
+
+    # PWM_GROUP_GET acks with a 4-byte little-endian frequency, the widest DATA
+    # the protocol defines (100000 Hz), so LEN is 5.
+    def test_DecodesFourByteReadData(self):
+        self.assertEqual(
+            parse_response(frame("A5 05 01 A0 86 01 00 FD B7")),
+            Response(ack=True, data=bytes([0xA0, 0x86, 0x01, 0x00])),
+        )
+
+    # Every NACK carries one reason byte, whatever the opcode's ack width is.
+    def test_DecodesNackReasonByte(self):
+        response = parse_response(frame("A5 02 00 06 3A C2"))
+        self.assertEqual(response, Response(ack=False, data=bytes([0x06])))
+        self.assertEqual(response.reason, NackReason.ERR_BUSY)
+
+    # A read's DATA is little-endian, so .value decodes it as one integer.
+    def test_ExposesReadDataAsLittleEndianValue(self):
+        self.assertEqual(parse_response(frame("A5 05 01 A0 86 01 00 FD B7")).value, 100000)
+        self.assertEqual(parse_response(frame("A5 03 01 77 01 C3 A9")).value, 375)
 
     # A single-bit flip in the CRC is caught rather than silently accepted.
     def test_RejectsCrcMismatch(self):
@@ -139,10 +165,11 @@ class ParseResponse(unittest.TestCase):
         with self.assertRaises(ProtocolError):
             parse_response(frame("5A 01 01 1F 3E"))
 
-    # Firmware only ever emits LEN 1 or 2; anything else is a desynced stream.
+    # DATA is at most 4 bytes, so LEN never exceeds 5; anything above that is a
+    # desynced stream rather than a command this client doesn't know yet.
     def test_RejectsUnexpectedLength(self):
         with self.assertRaises(ProtocolError):
-            parse_response(frame("A5 03 01 01 EC 81"))
+            parse_response(frame("A5 06 01 01 01 01 01 01 EC 81"))
 
     # A frame cut short before its CRC is an error, not a partial decode.
     def test_RejectsTruncatedFrame(self):
@@ -156,7 +183,7 @@ class ParseResponse(unittest.TestCase):
 
     # Trailing bytes past a complete frame are ignored, not treated as corruption.
     def test_IgnoresTrailingBytesAfterCompleteFrame(self):
-        self.assertEqual(parse_response(frame("A5 01 01 1F 3E A5 A5")), Response(ack=True, state=None))
+        self.assertEqual(parse_response(frame("A5 01 01 1F 3E A5 A5")), Response(ack=True))
 
 
 if __name__ == "__main__":

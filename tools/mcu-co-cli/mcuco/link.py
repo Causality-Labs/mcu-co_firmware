@@ -43,6 +43,12 @@ class McuCoLink:
         self.timeout = timeout
         self._stream = None
 
+        # The exact bytes of the last exchange, kept for diagnostics: a reply
+        # that fails to parse is exactly when its bytes are worth seeing, and
+        # read_response() would otherwise consume them into an exception.
+        self.last_command_raw: bytes | None = None
+        self.last_response_raw: bytes | None = None
+
     @classmethod
     def from_stream(cls, stream, timeout: float = DEFAULT_TIMEOUT_S) -> "McuCoLink":
         """Wrap an already-open serial-like object. Used by the tests to run without hardware."""
@@ -75,6 +81,9 @@ class McuCoLink:
 
         if hasattr(stream, "reset_input_buffer"):
             stream.reset_input_buffer()  # drop anything left over from an abandoned exchange
+
+        self.last_command_raw = frame
+        self.last_response_raw = None
 
         stream.write(frame)
         return self.read_response()
@@ -112,7 +121,9 @@ class McuCoLink:
         if len(rest) < remaining:
             raise LinkTimeout(f"truncated response: expected {remaining} bytes after LEN, got {len(rest)}")
 
-        return parse_response(bytes([SOF]) + length_byte + rest)
+        raw = bytes([SOF]) + length_byte + rest
+        self.last_response_raw = raw
+        return parse_response(raw)
 
     def _require_stream(self):
         if self._stream is None:
