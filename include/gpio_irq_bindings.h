@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include "gpio.h"
 
-/* Matches the wire ACTION field 1:1 (mcu-co_Protocol.md: low=0, high=1, toggle=2). */
+/** @brief Matches the wire ACTION field 1:1 (mcu-co_Protocol.md: low=0, high=1, toggle=2). */
 typedef enum
 {
     IRQ_ACTION_LOW    = 0U,
@@ -12,6 +12,7 @@ typedef enum
     IRQ_ACTION_TOGGLE = 2U,
 } irq_action_t;
 
+/** @brief What an armed input pin's interrupt does to an output pin. */
 typedef struct
 {
     gpio_pin_t input_pin;
@@ -20,12 +21,20 @@ typedef struct
     bool active;
 } irq_binding_t;
 
-/* Indexed by pin number (0-15), matching how EXTI lines are shared across ports. */
+/**
+ * @brief The binding in force for each pin, or a zeroed entry for none.
+ *
+ * Indexed by pin number (0-15): one slot covers PA5, PB5 and PC5 alike, matching
+ * the hardware, which only lets one port own an EXTI line at a time.
+ */
 extern irq_binding_t irq_bindings[MAX_GPIO_INTERRUPTS];
 
-/* irq_dispatch_table[pin] is the callback to hand gpio_init_interrupt() - it
- * looks up irq_bindings[pin] at fire time, so it's safe to install before
- * anything is actually bound. */
+/**
+ * @brief Per-pin ISR callbacks to hand gpio_init_interrupt().
+ *
+ * Each looks irq_bindings[pin] up at fire time, so installing one before
+ * anything is bound is safe - it does nothing until a binding exists.
+ */
 extern const gpio_irq_callback_t irq_dispatch_table[MAX_GPIO_INTERRUPTS];
 
 #endif /* GPIO_IRQ_BINDINGS_H */

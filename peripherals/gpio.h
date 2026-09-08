@@ -116,9 +116,7 @@ typedef struct
 /**
  * @brief Initialise a GPIO pin.
  *
- * Enables the port clock and configures the pin mode, output type,
- * speed, and pull resistor. Reserved pins (PA13, PA14, PA15, PB3, PB4)
- * are protected and will return an error.
+ * Enables the port clock. Reserved pins (PA13-15, PB3/4) are refused.
  *
  * @param gpio   Pointer to pin handle (port + pin number)
  * @param config Pointer to pin configuration
@@ -131,8 +129,7 @@ status_t gpio_init(const gpio_pin_t *gpio, const gpio_config_t *config);
 /**
  * @brief Reset a GPIO pin to its default state.
  *
- * Clears MODER, OTYPER, OSPEEDR, PUPDR, and AFR for the pin.
- * Does not disable the port clock as other pins may still be active.
+ * Leaves the port clock on, as other pins may still be active.
  *
  * @param gpio Pointer to pin handle (port + pin number)
  * @return STATUS_OK on success, STATUS_ERR_INVALID_PIN on an invalid pin.
@@ -175,8 +172,6 @@ status_t gpio_set_state(const gpio_pin_t *gpio, gpio_state_t state);
 /**
  * @brief Toggle a GPIO output pin.
  *
- * Inverts the current state of the ODR bit for the given pin.
- *
  * @param gpio Pointer to pin handle (port + pin number)
  * @return STATUS_OK on success, STATUS_ERR_INVALID_PIN on an invalid pin,
  *         STATUS_ERR_INVALID_STATE if the pin is not configured as an output.
@@ -185,8 +180,6 @@ status_t gpio_toggle(const gpio_pin_t *gpio);
 
 /**
  * @brief Read the logic level of a GPIO input pin.
- *
- * Samples the IDR register. The pin must be configured as an input.
  *
  * @param gpio  Pointer to pin handle (port + pin number)
  * @param state Output parameter set to true if the pin is high, false if low
@@ -199,9 +192,6 @@ status_t gpio_read(const gpio_pin_t *gpio, bool *state);
 /**
  * @brief Configure a GPIO pin as an external interrupt.
  *
- * Enables the SYSCFG clock, maps the port to the EXTI line, configures the
- * trigger edge, unmasks the line, and enables the NVIC interrupt.
- *
  * @param gpio   Pointer to pin handle (port + pin number)
  * @param config Pointer to interrupt configuration (trigger and callback)
  * @return STATUS_OK on success, STATUS_ERR_INVALID_ARG if @p config is NULL or
@@ -213,13 +203,25 @@ status_t gpio_init_interrupt(const gpio_pin_t *gpio, const gpio_irq_config_t *co
 /**
  * @brief Deconfigure a GPIO external interrupt.
  *
- * Disables the NVIC interrupt, masks the EXTI line, clears the trigger
- * configuration, clears the EXTICR port mapping, and removes the callback.
- *
  * @param gpio Pointer to pin handle (port + pin number)
  * @return STATUS_OK on success, STATUS_ERR_INVALID_PIN on an invalid pin.
  */
 status_t gpio_deinit_interrupt(const gpio_pin_t *gpio);
+
+/**
+ * @brief Report the interrupt trigger currently armed on a pin.
+ *
+ * Read back from the EXTI registers, so it cannot drift from the hardware. A pin
+ * counts as armed only if its line is unmasked and mapped to that pin's port -
+ * the G4 shares each line by pin number across ports.
+ *
+ * @param gpio    Pointer to pin handle (port + pin number)
+ * @param trigger Output parameter for the armed trigger, written only on success
+ * @return STATUS_OK on success, STATUS_ERR_INVALID_ARG if @p trigger is NULL,
+ *         STATUS_ERR_INVALID_PIN on an invalid pin, STATUS_ERR_INVALID_STATE if
+ *         no interrupt is armed on the pin for its port.
+ */
+status_t gpio_get_interrupt_trigger(const gpio_pin_t *gpio, gpio_trigger_t *trigger);
 
 /** @brief Returns true if the pin is configured as alternate function. */
 bool is_pin_an_af(const gpio_pin_t *gpio);
@@ -233,8 +235,7 @@ bool is_pin_an_input(const gpio_pin_t *gpio);
 /**
  * @brief Set the alternate function for a GPIO pin.
  *
- * Writes to AFRL (pins 0–7) or AFRH (pins 8–15). The pin mode must
- * be set to GPIO_MODE_AF separately via gpio_init().
+ * The pin mode must be set to GPIO_MODE_AF separately via gpio_init().
  *
  * @param gpio Pointer to pin handle (port + pin number)
  * @param af   Alternate function selection (AF0–AF15)

@@ -7,10 +7,7 @@
 /**
  * @brief Start the SysTick 1 ms time base.
  *
- * Configures the Cortex-M SysTick timer to interrupt every millisecond off the
- * current SYSCLK, and zeroes the millisecond counter. Must be called after
- * rcc_init() has succeeded, as the reload value is derived from
- * rcc_get_sysclk_hz().
+ * Must be called after rcc_init(), which the reload value is derived from.
  *
  * @return STATUS_OK on success, STATUS_ERR_NOT_INIT if rcc_init() has not
  *         succeeded, STATUS_ERR_INVALID_STATE if the reload value overflows
@@ -31,10 +28,9 @@ uint32_t systick_get_ms(void);
 /**
  * @brief Block for at least @p ms milliseconds.
  *
- * Busy-waits on the SysTick millisecond counter. The wait is wrap-safe and
- * guarantees a minimum delay (a call may return up to one tick late if issued
- * just before a tick fires). Do not call before systick_init() or from an ISR
- * with priority equal to or higher than SysTick.
+ * Busy-waits, wrap-safe, and guarantees a minimum: a call may return up to one
+ * tick late. Not for use before systick_init(), or from an ISR at or above
+ * SysTick's priority.
  *
  * @param ms Number of milliseconds to wait.
  */

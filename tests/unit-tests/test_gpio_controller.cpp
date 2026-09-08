@@ -372,6 +372,44 @@ TEST(GpioController, IrqBindRejectsWhenOutputPinNotConfiguredAsOutput)
     LONGS_EQUAL(STATUS_ERR_INVALID_STATE, gpio_controller_irq_bind(payload, 6));
 }
 
+// The input pin's interrupt must already be armed by gpio_controller_irq_cfg;
+// binding an action to a pin that can never fire is refused.
+TEST(GpioController, IrqBindRejectsWhenPinHasNoArmedEdge)
+{
+    GpioSpy_SetIsInput(true);
+    GpioSpy_SetIsOutput(true);
+    GpioSpy_SetArmedTriggerStatus(STATUS_ERR_INVALID_STATE);
+
+    uint8_t payload[6] = {WIRE_EDGE_RISING, 0, 0, IRQ_ACTION_HIGH, 0, 1};
+    LONGS_EQUAL(STATUS_ERR_INVALID_STATE, gpio_controller_irq_bind(payload, 6));
+}
+
+// Binding an edge other than the armed one is refused rather than accepted and
+// left to misfire: the ISR cannot tell the edges apart once the line fires.
+TEST(GpioController, IrqBindRejectsWhenRequestedEdgeIsNotTheArmedOne)
+{
+    GpioSpy_SetIsInput(true);
+    GpioSpy_SetIsOutput(true);
+    GpioSpy_SetArmedTrigger(RISING);
+
+    uint8_t payload[6] = {WIRE_EDGE_FALLING, 0, 0, IRQ_ACTION_HIGH, 0, 1};
+    LONGS_EQUAL(STATUS_ERR_INVALID_STATE, gpio_controller_irq_bind(payload, 6));
+}
+
+// The armed edge is looked up on the input pin, not the output pin.
+TEST(GpioController, IrqBindChecksTheArmedEdgeOnTheInputPin)
+{
+    GpioSpy_SetIsInput(true);
+    GpioSpy_SetIsOutput(true);
+    GpioSpy_SetArmedTrigger(BOTH);
+
+    uint8_t payload[6] = {WIRE_EDGE_BOTH, GPIO_PORT_C, 7, IRQ_ACTION_LOW, GPIO_PORT_B, 4};
+    LONGS_EQUAL(STATUS_OK, gpio_controller_irq_bind(payload, 6));
+
+    LONGS_EQUAL(GPIO_PORT_C, GpioSpy_GetLastGetTriggerPin().port);
+    LONGS_EQUAL(7, GpioSpy_GetLastGetTriggerPin().pin);
+}
+
 // Binding a pin that's already bound should be rejected rather than
 // silently replacing the existing binding.
 TEST(GpioController, IrqBindRejectsWhenPinAlreadyBound)
@@ -388,6 +426,7 @@ TEST(GpioController, IrqBindStoresBindingOnSuccess)
 {
     GpioSpy_SetIsInput(true);
     GpioSpy_SetIsOutput(true);
+    GpioSpy_SetArmedTrigger(FALLING);
 
     uint8_t payload[6] = {WIRE_EDGE_FALLING, GPIO_PORT_A, 3, IRQ_ACTION_TOGGLE, GPIO_PORT_B, 4};
     LONGS_EQUAL(STATUS_OK, gpio_controller_irq_bind(payload, 6));

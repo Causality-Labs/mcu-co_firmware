@@ -167,7 +167,9 @@ status_t gpio_controller_irq_bind(const uint8_t *payload, uint8_t length)
         return STATUS_ERR_INVALID_PIN;
     }
 
-    if ((edge != GPIO_IRQ_EDGE_RISING) && (edge != GPIO_IRQ_EDGE_FALLING) && (edge != GPIO_IRQ_EDGE_BOTH))
+    gpio_trigger_t requested_trigger;
+
+    if (wire_edge_to_trigger(edge, &requested_trigger) != STATUS_OK)
     {
         LOG_ERROR(MODULE_NAME, "invalid edge select %u", edge);
         return STATUS_ERR_INVALID_ARG;
@@ -193,6 +195,22 @@ status_t gpio_controller_irq_bind(const uint8_t *payload, uint8_t length)
     {
         LOG_ERROR(MODULE_NAME, "pins not configured for irq bind: in P%c%u, out P%c%u", (char)('A' + in_port), in_pin,
                   (char)('A' + out_port), out_pin);
+        return STATUS_ERR_INVALID_STATE;
+    }
+
+    /* EXTI cannot report which edge fired, so binding any edge but the armed
+     * one would misfire. */
+    gpio_trigger_t armed_trigger;
+
+    if (gpio_get_interrupt_trigger(&in_gpio, &armed_trigger) != STATUS_OK)
+    {
+        LOG_ERROR(MODULE_NAME, "no interrupt armed on P%c%u - configure its edge first", (char)('A' + in_port), in_pin);
+        return STATUS_ERR_INVALID_STATE;
+    }
+
+    if (armed_trigger != requested_trigger)
+    {
+        LOG_ERROR(MODULE_NAME, "P%c%u is armed for a different edge than the bind requested", (char)('A' + in_port), in_pin);
         return STATUS_ERR_INVALID_STATE;
     }
 

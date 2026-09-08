@@ -13,6 +13,8 @@ void GpioSpy_SetIsInput(bool value);
 void GpioSpy_SetIsOutput(bool value);
 void GpioSpy_SetIsAf(bool value);
 void GpioSpy_SetReadState(bool value); /* value gpio_read() writes to its output param */
+void GpioSpy_SetArmedTrigger(gpio_trigger_t trigger);  /* trigger gpio_get_interrupt_trigger() reports */
+void GpioSpy_SetArmedTriggerStatus(status_t status);   /* status it returns; non-OK leaves the output param alone */
 
 /* --- inspect what was last recorded --- */
 gpio_pin_t GpioSpy_GetLastInitPin(void);
@@ -31,6 +33,8 @@ gpio_pin_t GpioSpy_GetLastInitInterruptPin(void);
 gpio_irq_config_t GpioSpy_GetLastInitInterruptConfig(void);
 
 gpio_pin_t GpioSpy_GetLastDeinitInterruptPin(void);
+
+gpio_pin_t GpioSpy_GetLastGetTriggerPin(void);
 
 gpio_pin_t GpioSpy_GetLastSetAfPin(void);
 gpio_af_t GpioSpy_GetLastSetAfAf(void);

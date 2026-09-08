@@ -56,15 +56,8 @@ typedef enum
 /**
  * @brief Configure the system clock to the requested target.
  *
- * For ::RCC_SYSCLK_HSI_170MHZ the sequence is, in order:
- *   1. Enable the PWR clock, select voltage scaling Range 1 and boost mode.
- *   2. Set flash latency to 4 wait states (with prefetch and caches) before
- *      raising the frequency.
- *   3. Enable HSI16 and configure the PLL (M=4, N=85, R=2 -> 170 MHz).
- *   4. Switch SYSCLK to the PLL with the AHB prescaler stepped /2 then /1.
- *
- * Every hardware ready-flag wait is bounded by a retry counter, so a failure
- * returns an error instead of hanging.
+ * Every hardware ready-flag wait is bounded, so a failure returns an error
+ * rather than hanging.
  *
  * @param target Desired system clock configuration
  * @return STATUS_OK on success, STATUS_ERR_INVALID_ARG on unknown target,
@@ -82,9 +75,6 @@ uint32_t rcc_get_sysclk_hz(void);
 /**
  * @brief Enable the bus clock for a peripheral.
  *
- * A dummy read-back guarantees the clock is active before the caller
- * accesses the peripheral.
- *
  * @param periph Peripheral to clock
  * @return STATUS_OK on success, STATUS_ERR_INVALID_ARG if @p periph is out of range
  */
@@ -101,8 +91,7 @@ status_t rcc_periph_disable(rcc_periph_t periph);
 /**
  * @brief Select the kernel clock source for a peripheral (CCIPR).
  *
- * Only peripherals with a selectable clock (the USART/UART/LPUART
- * instances) are supported.
+ * Only the USART/UART/LPUART instances have a selectable clock.
  *
  * @param periph Peripheral to configure
  * @param src    Desired clock source
@@ -113,10 +102,8 @@ status_t rcc_periph_set_clock_source(rcc_periph_t periph, rcc_clk_src_t src);
 /**
  * @brief Get the kernel clock frequency driving a timer peripheral.
  *
- * rcc_init() leaves both APB prescalers at /1, so the timer clocks equal SYSCLK
- * and the x2 multiplier the hardware applies when an APB prescaler is above /1
- * never comes into play. Timer drivers must call this rather than assume
- * SYSCLK, so a future prescaler change stays a one-line fix inside rcc.c.
+ * Timer drivers must call this rather than assume SYSCLK, so a future APB
+ * prescaler change stays a one-line fix inside rcc.c.
  *
  * @param periph Timer peripheral to query
  * @return Timer kernel clock in Hz, or 0 if @p periph is not a timer or

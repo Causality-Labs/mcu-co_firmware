@@ -362,6 +362,59 @@ status_t gpio_deinit_interrupt(const gpio_pin_t *gpio)
     return STATUS_OK;
 }
 
+status_t gpio_get_interrupt_trigger(const gpio_pin_t *gpio, gpio_trigger_t *trigger)
+{
+    if (trigger == NULL)
+    {
+        return STATUS_ERR_INVALID_ARG;
+    }
+
+    if (!is_valid_pin(gpio))
+    {
+        return STATUS_ERR_INVALID_PIN;
+    }
+
+    /* IMR1 first, and only then EXTICR: EXTI is always clocked on this part but
+     * SYSCFG is not, and an unmasked line is proof gpio_init_interrupt() ran and
+     * enabled the SYSCFG clock. Reading EXTICR before that check could read a
+     * gated peripheral. */
+    if ((EXTI->IMR1 & (0x1U << gpio->pin)) == 0U)
+    {
+        return STATUS_ERR_INVALID_STATE;
+    }
+
+    uint8_t exticr_idx     = gpio->pin / 4U;
+    uint8_t exticr_shift   = (gpio->pin % 4U) * 4U;
+    uint32_t current_owner = (SYSCFG->EXTICR[exticr_idx] >> exticr_shift) & 0xFU;
+
+    if (current_owner != (uint32_t)gpio->port)
+    {
+        return STATUS_ERR_INVALID_STATE;
+    }
+
+    bool rising  = (EXTI->RTSR1 & (0x1U << gpio->pin)) != 0U;
+    bool falling = (EXTI->FTSR1 & (0x1U << gpio->pin)) != 0U;
+
+    if (rising && falling)
+    {
+        *trigger = BOTH;
+    }
+    else if (rising)
+    {
+        *trigger = RISING;
+    }
+    else if (falling)
+    {
+        *trigger = FALLING;
+    }
+    else
+    {
+        return STATUS_ERR_INVALID_STATE;
+    }
+
+    return STATUS_OK;
+}
+
 status_t gpio_set_af(const gpio_pin_t *gpio, gpio_af_t af)
 {
     if (!is_valid_pin(gpio))

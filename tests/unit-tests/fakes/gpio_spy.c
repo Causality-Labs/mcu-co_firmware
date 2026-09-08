@@ -25,6 +25,10 @@ static gpio_irq_config_t last_init_interrupt_config;
 
 static gpio_pin_t last_deinit_interrupt_pin;
 
+static gpio_pin_t last_get_trigger_pin;
+static gpio_trigger_t armed_trigger_return;
+static status_t armed_trigger_status;
+
 static gpio_pin_t last_set_af_pin;
 static gpio_af_t last_set_af_af;
 
@@ -47,6 +51,9 @@ void GpioSpy_Reset(void)
     memset(&last_init_interrupt_pin, 0, sizeof(last_init_interrupt_pin));
     memset(&last_init_interrupt_config, 0, sizeof(last_init_interrupt_config));
     memset(&last_deinit_interrupt_pin, 0, sizeof(last_deinit_interrupt_pin));
+    memset(&last_get_trigger_pin, 0, sizeof(last_get_trigger_pin));
+    armed_trigger_return = RISING;
+    armed_trigger_status = STATUS_OK;
     memset(&last_set_af_pin, 0, sizeof(last_set_af_pin));
     last_set_af_af = GPIO_AF0;
 
@@ -60,6 +67,16 @@ void GpioSpy_Reset(void)
 void GpioSpy_SetReturnStatus(status_t status)
 {
     forced_status = status;
+}
+
+void GpioSpy_SetArmedTrigger(gpio_trigger_t trigger)
+{
+    armed_trigger_return = trigger;
+}
+
+void GpioSpy_SetArmedTriggerStatus(status_t status)
+{
+    armed_trigger_status = status;
 }
 
 void GpioSpy_SetIsInput(bool value)
@@ -132,6 +149,11 @@ gpio_pin_t GpioSpy_GetLastDeinitInterruptPin(void)
     return last_deinit_interrupt_pin;
 }
 
+gpio_pin_t GpioSpy_GetLastGetTriggerPin(void)
+{
+    return last_get_trigger_pin;
+}
+
 gpio_pin_t GpioSpy_GetLastSetAfPin(void)
 {
     return last_set_af_pin;
@@ -196,6 +218,20 @@ status_t gpio_init_interrupt(const gpio_pin_t *gpio, const gpio_irq_config_t *co
     last_init_interrupt_pin    = *gpio;
     last_init_interrupt_config = *config;
     return forced_status;
+}
+
+status_t gpio_get_interrupt_trigger(const gpio_pin_t *gpio, gpio_trigger_t *trigger)
+{
+    last_get_trigger_pin = *gpio;
+
+    if (armed_trigger_status != STATUS_OK)
+    {
+        return armed_trigger_status;
+    }
+
+    *trigger = armed_trigger_return;
+
+    return STATUS_OK;
 }
 
 status_t gpio_deinit_interrupt(const gpio_pin_t *gpio)

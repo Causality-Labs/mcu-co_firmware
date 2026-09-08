@@ -69,8 +69,8 @@ not a second protocol-only vocabulary that would drift from it.
 | `0x01` | `ERR` | Unspecified failure. |
 | `0x02` | `ERR_INVALID_ARG` | A field is out of range (bad `GROUP`, `DUTY` above 1000, `FREQ` outside 1–1000000, malformed payload length). |
 | `0x03` | `ERR_INVALID_PIN` | Pin number out of range, or a reserved pin (PA13–15, PB3/4). |
-| `0x04` | `ERR_INVALID_STATE` | The resource isn't configured for this operation — `pwm channel set` on a pin never claimed by `pwm channel cfg`, `pwm channel cfg` on a group with no frequency, `gpio irq bind` on an edge that isn't armed. |
-| `0x05` | `ERR_NOT_INIT` | Peripheral or clock not brought up. |
+| `0x04` | `ERR_INVALID_STATE` | The pin isn't configured for this operation — `gpio set` on a pin that isn't an output, `gpio get` on a pin that isn't an input, `gpio irq bind` where the input pin isn't an input, the output pin isn't an output, or the armed edge isn't the one being bound, `gpio irq unbind` on a pin with no binding. |
+| `0x05` | `ERR_NOT_INIT` | Peripheral or clock not brought up — `pwm channel cfg` on a group with no frequency, `pwm channel set`/`get`/`release` on a pin never claimed by `pwm channel cfg`, `pwm group get`/`release` on a group that was never configured. |
 | `0x06` | `ERR_BUSY` | **The resource is already in use.** The pin is owned by another driver, or the PWM group is already configured and must be torn down before it can be reconfigured. |
 | `0x07` | `ERR_TIMEOUT` | Hardware did not respond in time. |
 | `0x08` | `ERR_UNSUPPORTED` | Unknown opcode, or a valid request the hardware can't satisfy (e.g. a pin with no PWM channel). |
@@ -230,8 +230,14 @@ the output pin directly. No host notification, no attention line for this path.
 
 `EDGE_SELECT` here is rising/falling/both — never `off` (that's `gpio irq cfg off`, which
 disarms the whole pin; `gpio irq unbind`, below, drops just the action). A pin has at most one
-active binding at a time (see the overwrite rule below), so `EDGE_SELECT` picks which edge(s)
+active binding at a time (see the overwrite rule below), so `EDGE_SELECT` names which edge(s)
 trigger *that one* action, not "one binding per edge."
+
+`EDGE_SELECT` must **match the edge already armed** by `gpio irq cfg` exactly, and is checked
+against the hardware rather than taken on trust. EXTI reports only that a line fired, never
+which edge did it, so a binding on any other edge would run its action on every edge the pin is
+armed for — including the one the host meant to exclude. A pin armed `both` therefore takes a
+`bind both`, not a `bind rising`.
 
 **`bind` never overwrites an existing binding.** If the pin already has an active binding,
 `bind` NACKs — the host must `gpio irq unbind` it first, then bind again. This is deliberate:
@@ -450,7 +456,7 @@ resp  A5 03  01  FA 00     26 D4
 ```
 
 A NACK replaces the duty with the reason byte instead — e.g. `pwm channel get` on a pin that was
-never claimed: `A5 02 00 04 78 E2` (`ERR_INVALID_STATE`).
+never claimed: `A5 02 00 05 59 F2` (`ERR_NOT_INIT`).
 
 ## 12. `pwm group get` — read back a group's achieved frequency
 
@@ -473,7 +479,7 @@ resp  A5 05  01  E8 03 00 00  39 BF
 ```
 
 NACKs carry the reason in place of the frequency: `A5 02 00 02 BE 82` (`ERR_INVALID_ARG`, group
-above 2), or `A5 02 00 04 78 E2` (`ERR_INVALID_STATE`, group has no frequency configured).
+above 2), or `A5 02 00 05 59 F2` (`ERR_NOT_INIT`, group has no frequency configured).
 
 ---
 
@@ -504,8 +510,9 @@ nak   A5 02  00  06    3A C2
             └ ACK/NACK = 0 (failed)
 ```
 
-`gpio irq bind` NACKs with `ERR_INVALID_STATE` (`0x04`) if the edge it's targeting isn't currently armed on
-that pin (e.g. `bind falling` when the pin was only armed `rising`), or if the pin already has
+`gpio irq bind` NACKs with `ERR_INVALID_STATE` (`0x04`) if the pin has no edge armed at all, or if the
+edge it targets isn't exactly the armed one — `bind falling` on a pin armed `rising`, and
+equally `bind rising` on a pin armed `both` — or if the pin already has
 an active binding, which reports `ERR_BUSY` (see
 [§5](#5-gpio-irq-bind--attach-an-output-action-to-an-armed-edge)) — `gpio irq unbind` it first:
 
@@ -514,13 +521,14 @@ cmd   A5 33 06  01 00 05  01 01 00  56 E3
 nak   A5 02  00  04    78 E2
 ```
 
-The PWM commands NACK the same way. The ordering rules are the common cause:
-`pwm channel cfg` on a pin whose group has no frequency yet, or `pwm channel set` on a pin
-that was never claimed by `pwm channel cfg`:
+The PWM commands have the same ordering rules, but report breaking them as
+`ERR_NOT_INIT` (`0x05`) rather than `ERR_INVALID_STATE`: `pwm channel cfg` on a pin whose group
+has no frequency yet, or `pwm channel set` on a pin that was never claimed by
+`pwm channel cfg`:
 
 ```
 cmd   A5 42 04  FA 00  00 05  05 C1
-nak   A5 02  00  04    78 E2
+nak   A5 02  00  05    59 F2
 ```
 
 ---
