@@ -14,8 +14,6 @@
 
 static const uart_instance_t commands_transport = UART_INSTANCE_USART2;
 
-void button_ISR(void);
-
 int main(void)
 {
     if (rcc_init(RCC_SYSCLK_HSI_170MHZ) != STATUS_OK)
