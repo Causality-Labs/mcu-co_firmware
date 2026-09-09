@@ -46,7 +46,7 @@ typedef enum
 typedef enum
 {
     TIMER_POLARITY_ACTIVE_HIGH = 0U,
-    TIMER_POLARITY_ACTIVE_LOW = 1U,
+    TIMER_POLARITY_ACTIVE_LOW  = 1U,
 } timer_polarity_t;
 
 /** @brief PWM output configuration for a single channel. */
@@ -59,9 +59,8 @@ typedef struct
 /**
  * @brief Initialise a timer's time base.
  *
- * Enables the timer clock and programs the prescaler and reload for the
- * requested frequency. The counter is left stopped and no channel output is
- * configured; use timer_start() and timer_pwm_channel_init() for those.
+ * Leaves the counter stopped with no channel configured; use timer_start() and
+ * timer_pwm_channel_init() for those.
  *
  * @param instance     Timer to initialise
  * @param frequency_hz Time-base frequency, TIMER_FREQ_MIN_HZ to TIMER_FREQ_MAX_HZ
@@ -87,8 +86,7 @@ status_t timer_deinit(timer_instance_t instance);
 /**
  * @brief Start the counter.
  *
- * Separate from timer_init() so several channels can be configured while the
- * counter is stopped and then begin together on a single call.
+ * Separate from timer_init() so several channels can start together.
  *
  * @param instance Timer to start
  * @return STATUS_OK on success, STATUS_ERR_INVALID_ARG on an invalid instance,
@@ -110,10 +108,8 @@ status_t timer_stop(timer_instance_t instance);
 /**
  * @brief Change a timer's frequency.
  *
- * The prescaler and reload are shared by all four channels, so this affects
- * every channel on @p instance. The duty cycle of each configured channel is
- * preserved: compare values are recomputed against the new reload, since a raw
- * compare value means a different duty once the reload changes.
+ * The time base is shared, so this retunes every channel on @p instance. Each
+ * one's duty is preserved, recomputed against the new reload.
  *
  * @param instance     Timer to retune
  * @param frequency_hz New frequency, TIMER_FREQ_MIN_HZ to TIMER_FREQ_MAX_HZ
@@ -125,9 +121,8 @@ status_t timer_set_frequency(timer_instance_t instance, uint32_t frequency_hz);
 /**
  * @brief Read back a timer's frequency.
  *
- * Reports the frequency the hardware actually produces, which may differ
- * slightly from the requested value because the prescaler and reload are
- * integers.
+ * The prescaler and reload are integers, so this can differ slightly from the
+ * requested value.
  *
  * @param instance     Timer to query
  * @param frequency_hz Output parameter for the achieved frequency in Hz
@@ -139,9 +134,8 @@ status_t timer_get_frequency(timer_instance_t instance, uint32_t *frequency_hz);
 /**
  * @brief Configure a channel as a PWM output and claim its pin.
  *
- * Configures the mapped GPIO as an alternate function, programs PWM mode with
- * compare preload, and enables the channel output. Output begins once the
- * counter is running. The pin is refused if another driver already owns it.
+ * Claims the mapped GPIO and enables the channel output, which begins once the
+ * counter runs. A pin another driver already owns is refused.
  *
  * @param instance Timer owning the channel
  * @param channel  Channel to configure
@@ -166,9 +160,9 @@ status_t timer_pwm_channel_deinit(timer_instance_t instance, timer_channel_t cha
 /**
  * @brief Update a channel's duty cycle.
  *
- * Writes the compare register only, so the frequency and every other channel
- * are untouched. The write is buffered by the hardware and takes effect at the
- * next period boundary, so it can never produce a partial pulse.
+ * Leaves the frequency and every other channel untouched. Buffered by the
+ * hardware and applied at the next period boundary, so it never produces a
+ * partial pulse.
  *
  * @param instance      Timer owning the channel
  * @param channel       Channel to update
@@ -193,8 +187,8 @@ status_t timer_pwm_get_duty(timer_instance_t instance, timer_channel_t channel, 
 /**
  * @brief Resolve a GPIO pin to the timer and channel that can drive it.
  *
- * The pin-to-channel map lives in timer.c alongside the alternate-function
- * table, so callers never encode the mapping themselves.
+ * The map lives in timer.c beside the alternate-function table, so callers
+ * never encode it themselves.
  *
  * @param pin      Pin to look up
  * @param instance Output parameter for the owning timer

@@ -86,9 +86,8 @@ typedef struct
 /**
  * @brief Initialise a UART peripheral.
  *
- * Enables the peripheral clock, configures GPIO pins, baud rate, frame
- * format, and mode. For RX-capable modes, initialises the ring buffer
- * and enables the RXNE interrupt.
+ * RX-capable modes also initialise the ring buffer and enable the RXNE
+ * interrupt.
  *
  * @param instance  UART peripheral to initialise
  * @param config    Pointer to frame and mode configuration
@@ -103,9 +102,8 @@ status_t uart_init(uart_instance_t instance, const uart_config_t *config, const 
 /**
  * @brief Deinitialise a UART peripheral.
  *
- * Waits for any in-progress transmission to complete, disables the
- * peripheral and its clock, deconfigures GPIO pins, and disables the
- * NVIC interrupt if RX was active.
+ * Blocks until any in-progress transmission completes, then releases the
+ * peripheral, its clock, its pins and its interrupt.
  *
  * @param instance UART peripheral to deinitialise
  * @return STATUS_OK on success, STATUS_ERR_INVALID_ARG on an invalid instance,
@@ -116,7 +114,7 @@ status_t uart_deinit(uart_instance_t instance);
 /**
  * @brief Transmit a single byte.
  *
- * Blocks until the transmit data register is empty, then writes the byte.
+ * Blocks until the transmit register empties.
  *
  * @param instance UART peripheral to write to
  * @param data     Byte to transmit
@@ -129,9 +127,6 @@ status_t uart_write_byte(uart_instance_t instance, const uint8_t data);
 
 /**
  * @brief Transmit a buffer of bytes.
- *
- * Calls the internal TX helper for each byte. Fails early if any byte
- * times out waiting for the transmit register to empty.
  *
  * @param instance UART peripheral to write to
  * @param data     Pointer to transmit buffer
@@ -146,8 +141,6 @@ status_t uart_write_buffer(uart_instance_t instance, const uint8_t *data, uint16
 /**
  * @brief Read a single byte from the RX ring buffer.
  *
- * Returns immediately if no byte is available.
- *
  * @param instance UART peripheral to read from
  * @param data     Output parameter for the received byte
  * @return STATUS_OK on success, STATUS_ERR_EMPTY if no byte is available,
@@ -159,8 +152,7 @@ status_t uart_read_byte(uart_instance_t instance, uint8_t *data);
 /**
  * @brief Read available bytes from the RX ring buffer.
  *
- * Drains the ring buffer up to @p length bytes. Stops early if the buffer
- * empties before @p length is reached; draining an empty buffer is not an
+ * Stops early if the buffer empties first; draining an empty buffer is not an
  * error and yields @p bytes_read == 0 with STATUS_OK.
  *
  * @param instance   UART peripheral to read from

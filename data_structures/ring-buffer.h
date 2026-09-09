@@ -9,32 +9,27 @@
 /**
  * @brief Generic fixed-capacity ring (circular) buffer.
  *
- * Stores elements of an arbitrary, caller-defined size via memcpy over
- * caller-supplied backing storage. Safe for single-producer/single-consumer
- * use (e.g. an ISR writing, the main loop reading): the producer owns @p head
- * and the consumer owns @p tail.
- *
- * One slot is reserved to distinguish full from empty, so a buffer with
- * @p capacity slots holds at most @p capacity - 1 elements.
- *
- * Do not modify the fields directly; use the ring_buffer_* API.
+ * Elements of any caller-defined size, memcpy'd over caller-supplied storage.
+ * Safe for single-producer/single-consumer use (e.g. an ISR writing, the main
+ * loop reading): the producer owns @p head, the consumer owns @p tail. One slot
+ * is reserved to tell full from empty, so @p capacity slots hold @p capacity - 1
+ * elements. Use the API rather than touching the fields.
  */
 typedef struct
 {
-    void *buffer;        /**< Caller-supplied backing storage. */
-    size_t element_size; /**< Size in bytes of a single element. */
-    uint16_t capacity;   /**< Total slot count; must be a power of two. */
-    uint16_t head;       /**< Write index (producer-owned). */
-    uint16_t tail;       /**< Read index (consumer-owned). */
-    uint16_t mask;       /**< capacity - 1, used for index wraparound. */
+    void *buffer;
+    size_t element_size;
+    uint16_t capacity; /**< Total slot count; must be a power of two. */
+    uint16_t head;     /**< Write index (producer-owned). */
+    uint16_t tail;     /**< Read index (consumer-owned). */
+    uint16_t mask;     /**< capacity - 1, used for index wraparound. */
 } ring_buffer_t;
 
 /**
  * @brief Initialise a ring buffer over caller-supplied storage.
  *
- * @p buffer must remain valid for the lifetime of the ring buffer and be at
- * least @p capacity * @p element_size bytes. @p capacity must be a power of
- * two so index wraparound can use a bitmask.
+ * @p buffer must outlive the ring buffer and hold @p capacity * @p element_size
+ * bytes. The power-of-two capacity lets wraparound use a bitmask.
  *
  * @param rb           Ring buffer to initialise
  * @param buffer       Backing storage for @p capacity elements
@@ -48,12 +43,6 @@ status_t ring_buffer_init(ring_buffer_t *rb, void *buffer, uint16_t capacity, si
 /**
  * @brief Copy one element into the buffer.
  *
- * Copies @p element_size bytes from @p element into the next free slot and
- * advances the head. If the buffer is full, behaviour depends on
- * @p overwrite: when false, the write fails and existing data is never
- * touched; when true, the oldest element is evicted (tail advances) to make
- * room and the write always succeeds.
- *
  * @param rb        Ring buffer to write to
  * @param element   Pointer to the element to copy in
  * @param overwrite When true, evict the oldest element on a full buffer
@@ -66,9 +55,6 @@ status_t ring_buffer_write(ring_buffer_t *rb, const void *element, bool overwrit
 /**
  * @brief Copy one element out of the buffer.
  *
- * Copies @p element_size bytes from the oldest slot into @p element and
- * advances the tail.
- *
  * @param rb      Ring buffer to read from
  * @param element Destination for the element (at least @p element_size bytes)
  * @return STATUS_OK on success, STATUS_ERR_INVALID_ARG on a NULL pointer,
@@ -79,7 +65,7 @@ status_t ring_buffer_read(ring_buffer_t *rb, void *element);
 /**
  * @brief Discard all buffered elements.
  *
- * Resets the head and tail to empty. The backing storage is left untouched.
+ * The backing storage is left untouched.
  *
  * @param rb Ring buffer to flush
  * @return STATUS_OK on success, STATUS_ERR_INVALID_ARG if @p rb is NULL.

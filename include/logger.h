@@ -52,15 +52,12 @@ void logger_flush(void);
 /**
  * @brief Enqueue a log entry. Non-blocking, not ISR-safe.
  *
- * Stores @p module and @p fmt as pointers and copies @p argc argument words;
- * formatting is deferred to logger_flush(). Both strings must therefore have
- * static storage duration — string literals. The same applies to any %s
- * argument, whose pointer is stored rather than its text.
+ * Formatting is deferred to logger_flush(), so @p module, @p fmt and any %s
+ * argument are stored as pointers and must be string literals.
  *
- * Single-producer: must be called only from thread / main-loop context.
- * From an ISR, set a flag and emit the log from the main loop instead.
- * Do not call directly — use the LOG_* macros so the compile-time level
- * filter can strip the call and the argument count is computed for you.
+ * Single-producer: main-loop context only. From an ISR, set a flag and log from
+ * the main loop. Call through the LOG_* macros, not directly - they apply the
+ * compile-time level filter and count the arguments.
  *
  * @param level  Severity of this entry.
  * @param module Module tag, a string literal.

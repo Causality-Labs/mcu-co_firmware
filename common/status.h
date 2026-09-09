@@ -31,11 +31,8 @@ typedef enum
 /**
  * @brief Return a human-readable name for a status code.
  *
- * Intended for logging. Always returns a valid, non-NULL string; unknown
- * values map to "?".
- *
  * @param status Status code to describe.
- * @return Constant string naming the status code.
+ * @return Constant, never-NULL name for the code; "?" if unknown.
  */
 const char *status_to_str(status_t status);
 

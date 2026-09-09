@@ -12,7 +12,7 @@
 #define PWM_GROUP_CFG_GROUP_IDX   4U
 
 #define PWM_GROUP_RELEASE_PAYLOAD_LEN 1U
-#define PWM_GROUP_RELEASE_GROUP_IDX 0U
+#define PWM_GROUP_RELEASE_GROUP_IDX   0U
 
 #define PWM_CHANNEL_CFG_PAYLOAD_LEN 3U
 #define PWM_CHANNEL_CFG_POL_IDX     0U
@@ -181,8 +181,7 @@ status_t pwm_controller_channel_cfg(const uint8_t *payload, uint8_t length)
 
     uint8_t polarity = payload[PWM_CHANNEL_CFG_POL_IDX];
 
-    if ((polarity != TIMER_POLARITY_ACTIVE_LOW) &&
-        (polarity != TIMER_POLARITY_ACTIVE_HIGH))
+    if ((polarity != TIMER_POLARITY_ACTIVE_LOW) && (polarity != TIMER_POLARITY_ACTIVE_HIGH))
     {
         LOG_ERROR(MODULE_NAME, "invalid polarity %u", polarity);
         return STATUS_ERR_INVALID_ARG;
