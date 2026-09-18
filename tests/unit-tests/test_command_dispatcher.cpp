@@ -8,12 +8,20 @@ extern "C"
 #include "pwm_controller_spy.h"
 }
 
+#define OPCODE_PROBE 0x10U
+
 #define OPCODE_GPIO_CFG        0x30U
 #define OPCODE_GPIO_WRITE      0x31U
 #define OPCODE_GPIO_READ       0x32U
 #define OPCODE_GPIO_IRQ_BIND   0x33U
 #define OPCODE_GPIO_IRQ_CFG    0x34U
 #define OPCODE_GPIO_IRQ_UNBIND 0x35U
+#define OPCODE_GPIO_TOGGLE     0x36U
+
+#define PROBE_MAGIC_BYTE_0 0x4DU /* 'M' */
+#define PROBE_MAGIC_BYTE_1 0x43U /* 'C' */
+#define PROBE_MAGIC_BYTE_2 0x55U /* 'U' */
+#define PROBE_MAGIC_BYTE_3 0x4FU /* 'O' */
 
 #define OPCODE_PWM_GROUP_CFG     0x40U
 #define OPCODE_PWM_CFG           0x41U
@@ -141,6 +149,37 @@ TEST(CommandDispatcher, DispatchRoutesGpioIrqUnbindOpcode)
     CHECK_TRUE(resp.ack);
 }
 
+// GPIO_TOGGLE (0x36) should route to gpio_controller_toggle() and copy the
+// pin's post-toggle level into the response.
+TEST(CommandDispatcher, DispatchRoutesGpioToggleOpcodeAndSetsRespState)
+{
+    GpioControllerSpy_SetToggleState(true);
+
+    frame.opcode = OPCODE_GPIO_TOGGLE;
+    frame.length = 2;
+
+    LONGS_EQUAL(STATUS_OK, dispatch_command(&frame, &resp));
+    LONGS_EQUAL(GPIO_CONTROLLER_CALL_TOGGLE, GpioControllerSpy_GetLastCall());
+    CHECK_TRUE(resp.ack);
+    LONGS_EQUAL(1, resp.data_len);
+    LONGS_EQUAL(1, resp.data[0]);
+}
+
+// A pin toggling to low must serialise as 0x00, not just pass because a
+// handler hardcoded 1.
+TEST(CommandDispatcher, DispatchSerialisesGpioToggleLowAsZero)
+{
+    GpioControllerSpy_SetToggleState(false);
+
+    frame.opcode = OPCODE_GPIO_TOGGLE;
+    frame.length = 2;
+
+    LONGS_EQUAL(STATUS_OK, dispatch_command(&frame, &resp));
+    CHECK_TRUE(resp.ack);
+    LONGS_EQUAL(1, resp.data_len);
+    LONGS_EQUAL(0, resp.data[0]);
+}
+
 // An opcode that doesn't match any known command should be rejected without
 // calling into gpio_controller at all, and the NACK carries the reason.
 TEST(CommandDispatcher, DispatchRejectsUnknownOpcode)
@@ -152,6 +191,37 @@ TEST(CommandDispatcher, DispatchRejectsUnknownOpcode)
     CHECK_FALSE(resp.ack);
     LONGS_EQUAL(1, resp.data_len);
     LONGS_EQUAL(STATUS_ERR_UNSUPPORTED, resp.data[0]);
+}
+
+// PROBE (0x10) carries no controller of its own - it should ack with the
+// firmware's magic word, little-endian, without touching gpio_controller.
+TEST(CommandDispatcher, DispatchRoutesProbeOpcodeAndRepliesWithMagicLittleEndian)
+{
+    frame.opcode = OPCODE_PROBE;
+    frame.length = 0;
+
+    LONGS_EQUAL(STATUS_OK, dispatch_command(&frame, &resp));
+    LONGS_EQUAL(GPIO_CONTROLLER_CALL_NONE, GpioControllerSpy_GetLastCall());
+    CHECK_TRUE(resp.ack);
+    LONGS_EQUAL(4, resp.data_len);
+    LONGS_EQUAL(PROBE_MAGIC_BYTE_0, resp.data[0]);
+    LONGS_EQUAL(PROBE_MAGIC_BYTE_1, resp.data[1]);
+    LONGS_EQUAL(PROBE_MAGIC_BYTE_2, resp.data[2]);
+    LONGS_EQUAL(PROBE_MAGIC_BYTE_3, resp.data[3]);
+}
+
+// PROBE carries no payload; a non-empty one should be rejected rather than
+// silently ignored.
+TEST(CommandDispatcher, DispatchProbeRejectsNonEmptyPayload)
+{
+    frame.opcode     = OPCODE_PROBE;
+    frame.length     = 1;
+    frame.payload[0] = 0;
+
+    LONGS_EQUAL(STATUS_ERR_INVALID_ARG, dispatch_command(&frame, &resp));
+    CHECK_FALSE(resp.ack);
+    LONGS_EQUAL(1, resp.data_len);
+    LONGS_EQUAL(STATUS_ERR_INVALID_ARG, resp.data[0]);
 }
 
 // A failure from gpio_controller must be propagated, and the response must

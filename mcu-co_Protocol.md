@@ -52,8 +52,10 @@ knows how many bytes are coming without having to know the outcome first.
 | Opcode | LEN | DATA |
 |--------|-----|------|
 | `GPIO_READ` | `0x02` | 1 byte — pin level, `0x00` low / `0x01` high (called `STATE` in [§3](#3-gpio-get--read-an-input-pin)) |
+| `GPIO_TOGGLE` | `0x02` | 1 byte — pin level *after* toggling, `0x00` low / `0x01` high |
 | `PWM_GET` | `0x03` | 2 bytes — duty, uint16 LE |
 | `PWM_GROUP_GET` | `0x05` | 4 bytes — achieved frequency in Hz, uint32 LE |
+| `PROBE` | `0x05` | 4 bytes — magic word `"MCUO"`, sent as raw ASCII bytes (`4D 43 55 4F`), not a numeric field |
 | all others | `0x01` | none |
 | *any opcode, on NACK* | `0x02` | 1 byte — [reason code](#nack-reason-codes) |
 
@@ -115,6 +117,7 @@ e.g. CRC `0xE433` is transmitted as `33 E4`.
 
 | CLI | Opcode | Payload | Response payload |
 |-----|--------|---------|------------------|
+| `probe` | `PROBE` `0x10` | *(none)* | `[ACK/NACK, MAGIC]` |
 | `gpio cfg input\|output <port> <pin>` | `GPIO_CFG` `0x30` | `[DIR, PORT, PIN]` | `[ACK/NACK]` |
 | `gpio set high\|low <port> <pin>` | `GPIO_WRITE` `0x31` | `[LEVEL, PORT, PIN]` | `[ACK/NACK]` |
 | `gpio get <port> <pin>` | `GPIO_READ` `0x32` | `[PORT, PIN]` | `[ACK/NACK, STATE]` |
@@ -122,6 +125,7 @@ e.g. CRC `0xE433` is transmitted as `33 E4`.
 | `gpio irq cfg <edge> <port> <pin>` | `GPIO_IRQ_CFG` `0x34` | `[EDGE, PORT, PIN]` | `[ACK/NACK]` |
 | `gpio irq cfg off <port> <pin>` | `GPIO_IRQ_CFG` `0x34` | `[0, PORT, PIN]` | `[ACK/NACK]` |
 | `gpio irq unbind <port> <pin>` | `GPIO_IRQ_UNBIND` `0x35` | `[PORT, PIN]` | `[ACK/NACK]` |
+| `gpio toggle <port> <pin>` | `GPIO_TOGGLE` `0x36` | `[PORT, PIN]` | `[ACK/NACK, STATE]` |
 | `pwm group cfg <freq_hz> <group>` | `PWM_GROUP_CFG` `0x40` | `[FREQ_LE32, GROUP]` | `[ACK/NACK]` |
 | `pwm channel cfg high\|low <port> <pin>` | `PWM_CFG` `0x41` | `[POL, PORT, PIN]` | `[ACK/NACK]` |
 | `pwm channel set <duty> <port> <pin>` | `PWM_SET` `0x42` | `[DUTY_LE16, PORT, PIN]` | `[ACK/NACK]` |
@@ -131,6 +135,31 @@ e.g. CRC `0xE433` is transmitted as `33 E4`.
 | `pwm group release <group>` | `PWM_GROUP_RELEASE` `0x46` | `[GROUP]` | `[ACK/NACK]` |
 
 ---
+
+## 0. `probe` — confirm the link
+
+```
+probe
+```
+
+No payload, and no controller behind it — it's the one command that exists purely for the
+transport itself. ACK carries a fixed 4-byte magic word, `"MCUO"` (sent as raw ASCII bytes, not
+a numeric field), so a host that's still discovering which serial port mcu-co is on can send
+`probe` down each candidate port and use the magic to tell "mcu-co answered" apart from "some
+other device answered with a coincidentally valid-looking response" — a bare ACK alone can't do
+that, since every bare ACK on this protocol is byte-identical (see [Response
+frame](#response-frame)). A NACK never happens here on a well-formed frame; a non-empty payload
+is the only way to make `probe` fail, and it fails with `ERR_INVALID_ARG` like any other command
+given a payload it doesn't expect.
+
+Payload *(none)*. Example:
+
+```
+cmd   A5 10 00        7C 1E
+resp  A5 05  01  4D 43 55 4F  C6 BC
+            │   └ MAGIC     = "MCUO"
+            └ ACK/NACK  = 1 (success)
+```
 
 ## 1. `gpio cfg` — configure pin direction
 
@@ -283,6 +312,28 @@ Payload `[PORT, PIN]`. Example — unbind PA5:
 ```
 cmd   A5 35 02  00 05     A9 2A
 ack   A5 01  01        1F 3E
+```
+
+## 6.5 `gpio toggle` — flip a configured output pin
+
+```
+gpio toggle <port> <pin>
+```
+
+Flips the pin's current level and reports what it ended up at, so a host driving an LED or
+similar doesn't have to track state itself or spend a second round trip on `gpio get` — one
+command does the write and the read. NACKs `ERR_INVALID_STATE` if the pin isn't configured as
+an output, same as `gpio set`.
+
+Payload `[PORT, PIN]` (no qualifier — there's nothing to choose, unlike `gpio set`). Response is
+`[ACK/NACK, STATE]`, where STATE is the pin's level *after* toggling. Example — toggle PA5,
+ends up high:
+
+```
+cmd   A5 36 02  00 05     75 B1
+resp  A5 02  01 01     EC 81
+            │  └ STATE    = 1 (high)
+            └ ACK/NACK = 1 (success)
 ```
 
 ---
@@ -557,6 +608,8 @@ nak   A5 02  00  05    59 F2
 ## Test vectors
 
 The worked frames above are valid CCITT-FALSE frames and can be used directly as parser test vectors. Additional cases worth fuzzing: bytes delivered one-per-interrupt, partial frame then timeout, single-bit CRC flips, `0xA5` embedded in payload, unknown opcode, out-of-range port/pin, EXTI-line conflicts (now signaled as a bare NACK), `gpio irq bind` targeting an edge that isn't currently armed, `gpio irq bind` on a pin that's already bound, and `gpio irq unbind` on a pin with no active binding.
+
+`probe` given a non-empty payload (`ERR_INVALID_ARG`), and `gpio toggle` on a pin that isn't configured as an output (`ERR_INVALID_STATE`) — plus toggling a pin currently low and confirming `STATE` comes back high, and vice versa, since a handler that hardcodes one level would still pass a test that only checks one direction.
 
 PWM-specific cases: `pwm channel cfg` on a pin with no PWM channel mapped (e.g. PA0),
 `pwm channel cfg` before its group has a frequency, `pwm channel cfg` on a pin already claimed

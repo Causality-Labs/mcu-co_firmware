@@ -26,14 +26,20 @@ CRC_LEN = 2
 MAX_RESPONSE_DATA = 4
 MAX_RESPONSE_LEN = 1 + MAX_RESPONSE_DATA  # LEN counts the ACK/NACK byte too
 
+# PROBE's ACK data: raw ASCII bytes, not a numeric field - compare Response.data
+# to this directly rather than reading Response.value.
+PROBE_MAGIC = b"MCUO"
+
 
 class Opcode(IntEnum):
+    PROBE = 0x10
     GPIO_CFG = 0x30
     GPIO_WRITE = 0x31
     GPIO_READ = 0x32
     GPIO_IRQ_BIND = 0x33
     GPIO_IRQ_CFG = 0x34
     GPIO_IRQ_UNBIND = 0x35
+    GPIO_TOGGLE = 0x36
     PWM_GROUP_CFG = 0x40
     PWM_CFG = 0x41
     PWM_SET = 0x42

@@ -1,3 +1,4 @@
+#include <stddef.h>
 #include <stdint.h>
 #include "gpio.h"
 #include "gpio_irq_bindings.h"
@@ -22,7 +23,7 @@ static void irq_action_dispatch(uint8_t line)
         break;
 
     case IRQ_ACTION_TOGGLE:
-        (void)gpio_toggle(&irq_bindings[line].output_pin);
+        (void)gpio_toggle(&irq_bindings[line].output_pin, NULL);
         break;
 
     default:

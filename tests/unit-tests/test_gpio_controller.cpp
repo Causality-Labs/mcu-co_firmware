@@ -223,6 +223,75 @@ TEST(GpioController, ReadPropagatesGpioReadFailure)
     LONGS_EQUAL(STATUS_ERR_INVALID_STATE, gpio_controller_read(payload, 2, &state));
 }
 
+/* --- gpio_controller_toggle --- */
+
+// A NULL payload should be rejected.
+TEST(GpioController, ToggleRejectsNullPayload)
+{
+    bool state = false;
+    LONGS_EQUAL(STATUS_ERR_INVALID_ARG, gpio_controller_toggle(NULL, 2, &state));
+}
+
+// A NULL output state pointer should be rejected.
+TEST(GpioController, ToggleRejectsNullState)
+{
+    uint8_t payload[2] = {0, 0};
+    LONGS_EQUAL(STATUS_ERR_INVALID_ARG, gpio_controller_toggle(payload, 2, NULL));
+}
+
+// The payload must be exactly 2 bytes (port, pin); shorter or longer should
+// both be rejected.
+TEST(GpioController, ToggleRejectsWrongLength)
+{
+    uint8_t payload[2] = {0, 0};
+    bool state = false;
+    LONGS_EQUAL(STATUS_ERR_INVALID_ARG, gpio_controller_toggle(payload, 1, &state));
+    LONGS_EQUAL(STATUS_ERR_INVALID_ARG, gpio_controller_toggle(payload, 3, &state));
+}
+
+// port must be a valid port index.
+TEST(GpioController, ToggleRejectsPortOutOfRange)
+{
+    uint8_t payload[2] = {GPIO_NUM_OF_PORTS, 0};
+    bool state = false;
+    LONGS_EQUAL(STATUS_ERR_INVALID_PIN, gpio_controller_toggle(payload, 2, &state));
+}
+
+// pin must be within 0..MAX_PIN_COUNT.
+TEST(GpioController, ToggleRejectsPinOutOfRange)
+{
+    uint8_t payload[2] = {0, MAX_PIN_COUNT + 1};
+    bool state = false;
+    LONGS_EQUAL(STATUS_ERR_INVALID_PIN, gpio_controller_toggle(payload, 2, &state));
+}
+
+// Happy path: valid input should call gpio_toggle() with the decoded pin and
+// pass its post-toggle level back out to the caller.
+TEST(GpioController, ToggleCallsGpioToggleWithCorrectPinAndReturnsState)
+{
+    GpioSpy_SetToggleState(true);
+
+    uint8_t payload[2] = {GPIO_PORT_D, 9};
+    bool state = false;
+
+    LONGS_EQUAL(STATUS_OK, gpio_controller_toggle(payload, 2, &state));
+    CHECK_TRUE(state);
+
+    gpio_pin_t pin = GpioSpy_GetLastTogglePin();
+    LONGS_EQUAL(GPIO_PORT_D, pin.port);
+    LONGS_EQUAL(9, pin.pin);
+}
+
+// A failure from gpio_toggle() must be propagated, not swallowed.
+TEST(GpioController, TogglePropagatesGpioToggleFailure)
+{
+    GpioSpy_SetReturnStatus(STATUS_ERR_INVALID_STATE);
+
+    uint8_t payload[2] = {GPIO_PORT_A, 0};
+    bool state = false;
+    LONGS_EQUAL(STATUS_ERR_INVALID_STATE, gpio_controller_toggle(payload, 2, &state));
+}
+
 /* --- gpio_controller_irq_cfg --- */
 
 // A NULL payload should be rejected.

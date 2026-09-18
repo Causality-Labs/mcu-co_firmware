@@ -11,6 +11,7 @@ typedef enum
     GPIO_CONTROLLER_CALL_IO_CFG,
     GPIO_CONTROLLER_CALL_WRITE,
     GPIO_CONTROLLER_CALL_READ,
+    GPIO_CONTROLLER_CALL_TOGGLE,
     GPIO_CONTROLLER_CALL_IRQ_CFG,
     GPIO_CONTROLLER_CALL_IRQ_BIND,
     GPIO_CONTROLLER_CALL_IRQ_UNBIND,
@@ -23,6 +24,7 @@ void GpioControllerSpy_Reset(void);
 /* --- control what the spy returns --- */
 void GpioControllerSpy_SetReturnStatus(status_t status); /* applies to every status_t-returning call */
 void GpioControllerSpy_SetReadState(bool value);          /* value gpio_controller_read() writes to its output param */
+void GpioControllerSpy_SetToggleState(bool value);        /* value gpio_controller_toggle() writes to its output param */
 
 /* --- inspect the last call --- */
 gpio_controller_call_t GpioControllerSpy_GetLastCall(void);

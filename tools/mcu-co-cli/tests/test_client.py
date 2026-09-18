@@ -16,18 +16,34 @@ from test_link import FakeSerial, frame  # noqa: E402
 
 from mcuco.client import McuCo  # noqa: E402
 from mcuco.link import McuCoLink  # noqa: E402
-from mcuco.protocol import Action, Dir, Edge, Level, Polarity, Port, Response  # noqa: E402
+from mcuco.protocol import Action, Dir, Edge, Level, Polarity, Port, PROBE_MAGIC, Response  # noqa: E402
 
 ACK = frame("A5 01 01 1F 3E")
 READ_HIGH = frame("A5 02 01 01 EC 81")
 DUTY_250 = frame("A5 03 01 FA 00 26 D4")
 FREQ_1KHZ = frame("A5 05 01 E8 03 00 00 39 BF")
+PROBE_ACK = frame("A5 05 01 4D 43 55 4F C6 BC")
 
 
 def mcu(rx: bytes = ACK):
     """A client wired to a canned response, plus the stream to inspect afterwards."""
     stream = FakeSerial(rx)
     return McuCo(McuCoLink.from_stream(stream, timeout=0.05)), stream
+
+
+# --- probe ---
+
+class Probe(unittest.TestCase):
+    # Matches the doc's section 0 frame for "probe" - no payload.
+    def test_SendsDocProbeFrame(self):
+        client, stream = mcu(PROBE_ACK)
+        client.probe()
+        self.assertEqual(bytes(stream.written), frame("A5 10 00 7C 1E"))
+
+    # The magic word arrives verbatim in the response's data, not .value.
+    def test_ReturnsMagicWordFromResponse(self):
+        client, _ = mcu(PROBE_ACK)
+        self.assertEqual(client.probe(), Response(ack=True, data=PROBE_MAGIC))
 
 
 # --- gpio_cfg ---
@@ -172,6 +188,21 @@ class GpioIrqUnbind(unittest.TestCase):
         client, stream = mcu()
         client.gpio_irq_unbind(Port.A, 5)
         self.assertEqual(bytes(stream.written), frame("A5 35 02 00 05 A9 2A"))
+
+
+# --- gpio_toggle ---
+
+class GpioToggle(unittest.TestCase):
+    # Matches the doc's section 6.5 frame for "gpio toggle A 5".
+    def test_SendsDocToggleFrame(self):
+        client, stream = mcu(READ_HIGH)
+        client.gpio_toggle(Port.A, 5)
+        self.assertEqual(bytes(stream.written), frame("A5 36 02 00 05 75 B1"))
+
+    # The pin's post-toggle level arrives in the response's STATE field.
+    def test_ReturnsPostToggleStateFromResponse(self):
+        client, _ = mcu(READ_HIGH)
+        self.assertEqual(client.gpio_toggle(Port.A, 5), Response(ack=True, data=bytes([1])))
 
 
 if __name__ == "__main__":

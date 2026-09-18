@@ -8,12 +8,15 @@
 
 #define MODULE_NAME "COMMAND DISPATCHER"
 
+#define PROBE 0x10U
+
 #define GPIO_CFG        0x30U
 #define GPIO_WRITE      0x31U
 #define GPIO_READ       0x32U
 #define GPIO_IRQ_BIND   0x33U
 #define GPIO_IRQ_CFG    0x34U
 #define GPIO_IRQ_UNBIND 0x35U
+#define GPIO_TOGGLE     0x36U
 
 #define PWM_GROUP_CFG       0x40U
 #define PWM_CHANNEL_CFG     0x41U
@@ -22,6 +25,11 @@
 #define PWM_CHANNEL_GET     0x44U
 #define PWM_GROUP_GET       0x45U
 #define PWM_GROUP_RELEASE   0x46U
+
+/* ASCII "MCUO", little-endian on the wire (byte0='M' .. byte3='O') - lets a
+ * host auto-detecting its serial port tell mcu-co firmware apart from any
+ * other device that happens to answer with a well-formed ACK. */
+#define PROBE_MAGIC 0x4F55434DU
 
 typedef status_t (*command_action_fn)(const uint8_t *payload, uint8_t length);
 typedef status_t (*command_read_fn)(const uint8_t *payload, uint8_t length, uint32_t *value);
@@ -66,6 +74,40 @@ static status_t read_gpio_pin(const uint8_t *payload, uint8_t length, uint32_t *
     return ret;
 }
 
+/* PROBE (0x10) carries no controller of its own - it's just a link-identity
+ * check - so it's handled inline here rather than in a dedicated module. */
+static status_t read_probe_magic(const uint8_t *payload, uint8_t length, uint32_t *value)
+{
+    (void)payload;
+
+    if (length != 0U)
+    {
+        return STATUS_ERR_INVALID_ARG;
+    }
+
+    *value = PROBE_MAGIC;
+
+    return STATUS_OK;
+}
+
+/* gpio_controller_toggle() reports the pin's post-toggle level as a bool,
+ * which the table's single read signature widens to uint32_t so all read
+ * opcodes share one call site. */
+static status_t read_gpio_toggle(const uint8_t *payload, uint8_t length, uint32_t *value)
+{
+    bool pin_state = false;
+
+    status_t ret = gpio_controller_toggle(payload, length, &pin_state);
+    if (ret == STATUS_OK)
+    {
+        *value = pin_state ? 1U : 0U;
+
+        LOG_INFO(MODULE_NAME, "gpio_controller_toggle() pin is now %s", pin_state ? "high" : "low");
+    }
+
+    return ret;
+}
+
 /* pwm_controller_channel_get() reports a uint16_t duty, which the table's
  * single read signature widens to uint32_t so all read opcodes share one call
  * site. store_le() cuts it back to the two bytes the protocol puts on the wire. */
@@ -83,12 +125,14 @@ static status_t read_pwm_duty(const uint8_t *payload, uint8_t length, uint32_t *
 }
 
 static const command_entry_t COMMAND_TABLE[] = {
+    {.opcode = PROBE, .read = read_probe_magic, .data_len = 4U, .name = "probe"},
     {.opcode = GPIO_CFG, .action = gpio_controller_io_cfg, .data_len = 0U, .name = "gpio cfg"},
     {.opcode = GPIO_WRITE, .action = gpio_controller_write, .data_len = 0U, .name = "gpio write"},
     {.opcode = GPIO_READ, .read = read_gpio_pin, .data_len = 1U, .name = "gpio read"},
     {.opcode = GPIO_IRQ_BIND, .action = gpio_controller_irq_bind, .data_len = 0U, .name = "gpio irq bind"},
     {.opcode = GPIO_IRQ_CFG, .action = gpio_controller_irq_cfg, .data_len = 0U, .name = "gpio irq cfg"},
     {.opcode = GPIO_IRQ_UNBIND, .action = gpio_controller_irq_unbind, .data_len = 0U, .name = "gpio irq unbind"},
+    {.opcode = GPIO_TOGGLE, .read = read_gpio_toggle, .data_len = 1U, .name = "gpio toggle"},
     {.opcode = PWM_GROUP_CFG, .action = pwm_controller_group_cfg, .data_len = 0U, .name = "pwm group cfg"},
     {.opcode = PWM_CHANNEL_CFG, .action = pwm_controller_channel_cfg, .data_len = 0U, .name = "pwm channel cfg"},
     {.opcode = PWM_CHANNEL_SET, .action = pwm_controller_channel_set, .data_len = 0U, .name = "pwm channel set"},

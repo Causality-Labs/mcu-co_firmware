@@ -12,6 +12,7 @@ static uint8_t last_payload[GPIO_CONTROLLER_SPY_MAX_PAYLOAD];
 static uint8_t last_length;
 
 static bool read_return_state;
+static bool toggle_return_state;
 static status_t forced_status;
 
 void GpioControllerSpy_Reset(void)
@@ -21,6 +22,7 @@ void GpioControllerSpy_Reset(void)
     last_length = 0;
 
     read_return_state = false;
+    toggle_return_state = false;
     forced_status      = STATUS_OK;
 }
 
@@ -32,6 +34,11 @@ void GpioControllerSpy_SetReturnStatus(status_t status)
 void GpioControllerSpy_SetReadState(bool value)
 {
     read_return_state = value;
+}
+
+void GpioControllerSpy_SetToggleState(bool value)
+{
+    toggle_return_state = value;
 }
 
 gpio_controller_call_t GpioControllerSpy_GetLastCall(void)
@@ -88,6 +95,18 @@ status_t gpio_controller_read(const uint8_t *payload, uint8_t length, bool *stat
     if (state != NULL)
     {
         *state = read_return_state;
+    }
+
+    return forced_status;
+}
+
+status_t gpio_controller_toggle(const uint8_t *payload, uint8_t length, bool *state)
+{
+    record_call(GPIO_CONTROLLER_CALL_TOGGLE, payload, length);
+
+    if (state != NULL)
+    {
+        *state = toggle_return_state;
     }
 
     return forced_status;

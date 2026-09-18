@@ -228,7 +228,7 @@ status_t gpio_set_state(const gpio_pin_t *gpio, gpio_state_t state)
     return state ? gpio_set(gpio) : gpio_reset(gpio);
 }
 
-status_t gpio_toggle(const gpio_pin_t *gpio)
+status_t gpio_toggle(const gpio_pin_t *gpio, bool *state)
 {
     if (!is_valid_pin(gpio))
     {
@@ -241,6 +241,11 @@ status_t gpio_toggle(const gpio_pin_t *gpio)
     }
 
     get_port(gpio)->ODR ^= (0x1U << gpio->pin);
+
+    if (state != NULL)
+    {
+        *state = (get_port(gpio)->ODR & (0x1U << gpio->pin)) != 0U;
+    }
 
     return STATUS_OK;
 }

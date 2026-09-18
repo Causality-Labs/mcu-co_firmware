@@ -27,6 +27,7 @@ NACK = frame("A5 01 00 3E 2E")
 READ_HIGH = frame("A5 02 01 01 EC 81")
 DUTY_250 = frame("A5 03 01 FA 00 26 D4")
 FREQ_1KHZ = frame("A5 05 01 E8 03 00 00 39 BF")
+PROBE_ACK = frame("A5 05 01 4D 43 55 4F C6 BC")
 
 
 def connector(rx: bytes, sink=None):
@@ -60,6 +61,7 @@ class Grammar(unittest.TestCase):
     # Each CLI command in mcu-co_Protocol.md produces that section's worked frame.
     def test_ProducesDocFrameForEveryCommand(self):
         cases = [
+            (["probe"], "a5 10 00 7c 1e"),
             (["gpio", "cfg", "output", "A", "5"], "a5 30 03 01 00 05 ab e1"),
             (["gpio", "set", "high", "A", "5"], "a5 31 03 01 00 05 fa 4b"),
             (["gpio", "get", "A", "5"], "a5 32 02 00 05 84 7b"),
@@ -68,6 +70,7 @@ class Grammar(unittest.TestCase):
             (["gpio", "irq", "bind", "both", "C", "13", "toggle", "A", "5"],
              "a5 33 06 03 02 0d 02 00 05 92 93"),
             (["gpio", "irq", "unbind", "A", "5"], "a5 35 02 00 05 a9 2a"),
+            (["gpio", "toggle", "A", "5"], "a5 36 02 00 05 75 b1"),
         ]
         for argv, expected in cases:
             with self.subTest(command=" ".join(argv)):
@@ -119,6 +122,12 @@ class ExitCodes(unittest.TestCase):
         self.assertEqual(code, EXIT_ACK)
         self.assertIn("high", out)
 
+    # gpio toggle reports the pin's level *after* toggling, same wording as get.
+    def test_TogglePrintsPostToggleState(self):
+        code, out = run(["gpio", "toggle", "A", "5"], rx=READ_HIGH)
+        self.assertEqual(code, EXIT_ACK)
+        self.assertIn("high", out)
+
 
 # --- wire output ---
 
@@ -128,6 +137,23 @@ class WireOutput(unittest.TestCase):
         streams = []
         run(["gpio", "irq", "bind", "both", "C", "13", "toggle", "A", "5"], rx=ACK, sink=streams)
         self.assertEqual(bytes(streams[0].written), frame("A5 33 06 03 02 0D 02 00 05 92 93"))
+
+
+# --- probe output ---
+
+class ProbeOutput(unittest.TestCase):
+    # A successful probe reports the magic word it decoded, not a raw value.
+    def test_PrintsDecodedMagicWord(self):
+        code, out = run(["probe"], rx=PROBE_ACK)
+        self.assertEqual(code, EXIT_ACK)
+        self.assertIn("MCUO", out)
+
+    # A well-formed ACK with an unexpected magic is still ACK'd by the wire
+    # protocol, but the CLI should flag it rather than reporting plain success.
+    def test_FlagsUnexpectedMagic(self):
+        code, out = run(["probe"], rx=frame("A5 05 01 00 00 00 00 40 E7"))
+        self.assertEqual(code, EXIT_ACK)
+        self.assertIn("unexpected", out)
 
 
 # --- usage errors ---
