@@ -70,12 +70,3 @@ the host sends and answers each one.
 **GPIO (Input)** — pins the MCU reads on command, and can watch for edges.
 
 **PWM (Output)** — pins the MCU drives with a square wave at a set frequency and duty cycle.
-
-## License
-
-This project is licensed under the MIT License — see [LICENSE](LICENSE) for the full text.
-
-`vendor/` holds third-party code from STMicroelectronics (the startup file, the linker script and
-`system_stm32g4xx.c`), which stays under ST's own BSD-3-Clause terms and is not covered by the
-license above. CMSIS Core and the STM32G4 device headers (Apache-2.0) and CppUTest
-(BSD-3-Clause) are fetched at configure time rather than redistributed here.
