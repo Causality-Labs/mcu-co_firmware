@@ -45,6 +45,18 @@ status_t gpio_controller_write(const uint8_t *payload, uint8_t length);
 status_t gpio_controller_read(const uint8_t *payload, uint8_t length, bool *state);
 
 /**
+ * @brief GPIO_TOGGLE (0x36): flip a configured output pin.
+ *
+ * @param payload [PORT, PIN]
+ * @param length  Payload length in bytes
+ * @param state   Output parameter for the pin's level after toggling, written
+ *                only on success
+ * @return STATUS_OK, STATUS_ERR_INVALID_ARG if @p state is NULL,
+ *         STATUS_ERR_INVALID_STATE if the pin is not an output.
+ */
+status_t gpio_controller_toggle(const uint8_t *payload, uint8_t length, bool *state);
+
+/**
  * @brief GPIO_IRQ_CFG (0x34): arm or disarm a pin's EXTI trigger.
  *
  * Leaves the pin unbound either way; gpio_controller_irq_bind() attaches the

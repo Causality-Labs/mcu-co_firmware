@@ -102,6 +102,10 @@ class McuCo:
         """Single exit point for every command — subclasses override this to intercept frames."""
         return self.link.send_command(opcode, payload)
 
+    def probe(self) -> Response:
+        """probe — confirm the link; response.data is the magic word (PROBE_MAGIC) on success"""
+        return self._send(Opcode.PROBE, b"")
+
     def gpio_cfg(self, direction, port, pin) -> Response:
         """gpio cfg input|output <port> <pin>"""
         payload = bytes([_enum(Dir, direction, "direction"), _port(port), _pin(pin)])
@@ -137,6 +141,11 @@ class McuCo:
         """gpio irq unbind <port> <pin> — drop the binding, leave the trigger armed"""
         payload = bytes([_port(port), _pin(pin)])
         return self._send(Opcode.GPIO_IRQ_UNBIND, payload)
+
+    def gpio_toggle(self, port, pin) -> Response:
+        """gpio toggle <port> <pin> — flip an output pin; response carries its new level in .value"""
+        payload = bytes([_port(port), _pin(pin)])
+        return self._send(Opcode.GPIO_TOGGLE, payload)
 
     def pwm_group_cfg(self, freq_hz, group) -> Response:
         """pwm group cfg <freq_hz> <group> — bring a group up and start its counter

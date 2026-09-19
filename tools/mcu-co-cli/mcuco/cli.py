@@ -5,12 +5,14 @@ host SBC.
 The grammar is a transcription of the command reference in mcu-co_Protocol.md,
 so a command typed here is the command that will be typed there:
 
+    mcu-co-cli probe
     mcu-co-cli gpio cfg output A 5
     mcu-co-cli gpio set high A 5
     mcu-co-cli gpio get C 13
     mcu-co-cli gpio irq cfg both C 13
     mcu-co-cli gpio irq bind both C 13 toggle A 5
     mcu-co-cli gpio irq unbind C 13
+    mcu-co-cli gpio toggle A 5
     mcu-co-cli pwm group cfg 1000 0
     mcu-co-cli pwm channel cfg high A 5
     mcu-co-cli pwm channel set 250 A 5
@@ -27,7 +29,7 @@ import sys
 
 from .client import McuCo
 from .link import LinkError, LinkTimeout
-from .protocol import Action, Dir, Edge, Level, Polarity, Port, ProtocolError, build_command
+from .protocol import Action, Dir, Edge, Level, Polarity, Port, PROBE_MAGIC, ProtocolError, build_command
 
 EXIT_ACK = 0
 EXIT_NACK = 1
@@ -133,6 +135,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     # dest is "peripheral", not "group": pwm's own <group> argument owns that name.
     peripheral = parser.add_subparsers(dest="peripheral", required=True)
+
+    peripheral.add_parser("probe", help="confirm the link and identify the firmware")
+
     gpio = peripheral.add_parser("gpio", help="GPIO commands")
     gpio_cmd = gpio.add_subparsers(dest="command", required=True)
 
@@ -165,6 +170,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     irq_unbind = irq_cmd.add_parser("unbind", help="drop a binding, leaving the trigger armed")
     _add_target(irq_unbind)
+
+    toggle = gpio_cmd.add_parser("toggle", help="flip an output pin")
+    _add_target(toggle)
 
     pwm = peripheral.add_parser("pwm", help="PWM commands")
     pwm_cmd = pwm.add_subparsers(dest="command", required=True)
@@ -203,6 +211,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def run_command(mcu: McuCo, args):
+    if args.peripheral == "probe":
+        return mcu.probe()
+
     if args.peripheral == "pwm":
         return run_pwm_command(mcu, args)
 
@@ -212,6 +223,8 @@ def run_command(mcu: McuCo, args):
         return mcu.gpio_set(LEVELS[args.level], args.port, args.pin)
     if args.command == "get":
         return mcu.gpio_get(args.port, args.pin)
+    if args.command == "toggle":
+        return mcu.gpio_toggle(args.port, args.pin)
 
     if args.irq_command == "cfg":
         return mcu.gpio_irq_cfg(EDGES[args.edge], args.port, args.pin)
@@ -263,10 +276,16 @@ def describe(args, response) -> str:
         name = reason.name if hasattr(reason, "name") else f"0x{reason:02X}"
         return f"FAILED - {name}"
 
+    if args.peripheral == "probe":
+        magic = response.data
+        label = magic.decode("ascii", errors="replace")
+        suffix = "" if magic == PROBE_MAGIC else " (unexpected magic!)"
+        return f"OK - magic={label!r}{suffix}"
+
     if response.value is None:
         return "OK"
 
-    if args.peripheral == "gpio" and args.command == "get":
+    if args.peripheral == "gpio" and args.command in ("get", "toggle"):
         return f"OK - state={response.value} ({'high' if response.value else 'low'})"
 
     if args.peripheral == "pwm" and args.command == "channel":

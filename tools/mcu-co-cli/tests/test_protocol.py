@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from mcuco.protocol import (  # noqa: E402
     NackReason,
     MAX_PAYLOAD,
+    PROBE_MAGIC,
     Action,
     Dir,
     Edge,
@@ -55,9 +56,12 @@ class Crc16CcittFalse(unittest.TestCase):
 # --- build_command ---
 
 class BuildCommand(unittest.TestCase):
-    # Every worked command frame in mcu-co_Protocol.md sections 1-6.
+    # Every worked command frame in mcu-co_Protocol.md sections 0-6.5.
     def test_ReproducesDocCommandFrames(self):
         cases = [
+            ("probe",
+             Opcode.PROBE, b"",
+             "A5 10 00 7C 1E"),
             ("gpio cfg output A 5",
              Opcode.GPIO_CFG, bytes([Dir.OUTPUT, Port.A, 5]),
              "A5 30 03 01 00 05 AB E1"),
@@ -80,6 +84,9 @@ class BuildCommand(unittest.TestCase):
             ("gpio irq unbind A 5",
              Opcode.GPIO_IRQ_UNBIND, bytes([Port.A, 5]),
              "A5 35 02 00 05 A9 2A"),
+            ("gpio toggle A 5",
+             Opcode.GPIO_TOGGLE, bytes([Port.A, 5]),
+             "A5 36 02 00 05 75 B1"),
         ]
         for cli, opcode, payload, expected in cases:
             with self.subTest(cli=cli):
@@ -142,6 +149,13 @@ class ParseResponse(unittest.TestCase):
         self.assertEqual(
             parse_response(frame("A5 05 01 A0 86 01 00 FD B7")),
             Response(ack=True, data=bytes([0xA0, 0x86, 0x01, 0x00])),
+        )
+
+    # PROBE's ACK data is the raw ASCII magic word, not a numeric field.
+    def test_DecodesProbeMagicWord(self):
+        self.assertEqual(
+            parse_response(frame("A5 05 01 4D 43 55 4F C6 BC")),
+            Response(ack=True, data=PROBE_MAGIC),
         )
 
     # Every NACK carries one reason byte, whatever the opcode's ack width is.

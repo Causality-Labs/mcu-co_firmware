@@ -16,6 +16,7 @@ static gpio_pin_t last_set_state_pin;
 static gpio_state_t last_set_state_state;
 
 static gpio_pin_t last_toggle_pin;
+static bool toggle_return_state;
 
 static gpio_pin_t last_read_pin;
 static bool read_return_state;
@@ -46,6 +47,7 @@ void GpioSpy_Reset(void)
     memset(&last_set_state_pin, 0, sizeof(last_set_state_pin));
     last_set_state_state = GPIO_LOW;
     memset(&last_toggle_pin, 0, sizeof(last_toggle_pin));
+    toggle_return_state = false;
     memset(&last_read_pin, 0, sizeof(last_read_pin));
     read_return_state = false;
     memset(&last_init_interrupt_pin, 0, sizeof(last_init_interrupt_pin));
@@ -97,6 +99,11 @@ void GpioSpy_SetIsAf(bool value)
 void GpioSpy_SetReadState(bool value)
 {
     read_return_state = value;
+}
+
+void GpioSpy_SetToggleState(bool value)
+{
+    toggle_return_state = value;
 }
 
 gpio_pin_t GpioSpy_GetLastInitPin(void)
@@ -200,9 +207,15 @@ status_t gpio_set_state(const gpio_pin_t *gpio, gpio_state_t state)
     return forced_status;
 }
 
-status_t gpio_toggle(const gpio_pin_t *gpio)
+status_t gpio_toggle(const gpio_pin_t *gpio, bool *state)
 {
     last_toggle_pin = *gpio;
+
+    if (state != NULL)
+    {
+        *state = toggle_return_state;
+    }
+
     return forced_status;
 }
 

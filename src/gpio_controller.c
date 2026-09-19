@@ -24,6 +24,10 @@
 #define GPIO_READ_PORT_IDX    0U
 #define GPIO_READ_PIN_IDX     1U
 
+#define GPIO_TOGGLE_PAYLOAD_LEN 2U
+#define GPIO_TOGGLE_PORT_IDX    0U
+#define GPIO_TOGGLE_PIN_IDX     1U
+
 #define GPIO_CFG_IRQ_PAYLOAD_LEN 3U
 #define GPIO_CFG_IRQ_EDGE_IDX    0U
 #define GPIO_CFG_IRQ_PORT_IDX    1U
@@ -389,4 +393,37 @@ status_t gpio_controller_read(const uint8_t *payload, uint8_t length, bool *stat
     };
 
     return gpio_read(&gpio, state);
+}
+
+status_t gpio_controller_toggle(const uint8_t *payload, uint8_t length, bool *state)
+{
+    if ((payload == NULL) || (state == NULL))
+    {
+        return STATUS_ERR_INVALID_ARG;
+    }
+
+    if (length != GPIO_TOGGLE_PAYLOAD_LEN)
+    {
+        return STATUS_ERR_INVALID_ARG;
+    }
+
+    uint8_t port = payload[GPIO_TOGGLE_PORT_IDX];
+    uint8_t pin  = payload[GPIO_TOGGLE_PIN_IDX];
+
+    if (port >= GPIO_NUM_OF_PORTS)
+    {
+        return STATUS_ERR_INVALID_PIN;
+    }
+
+    if (pin > MAX_PIN_COUNT)
+    {
+        return STATUS_ERR_INVALID_PIN;
+    }
+
+    const gpio_pin_t gpio = {
+        .port = (gpio_port_t)port,
+        .pin  = pin,
+    };
+
+    return gpio_toggle(&gpio, state);
 }

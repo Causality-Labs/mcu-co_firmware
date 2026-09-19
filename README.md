@@ -70,7 +70,3 @@ the host sends and answers each one.
 **GPIO (Input)** — pins the MCU reads on command, and can watch for edges.
 
 **PWM (Output)** — pins the MCU drives with a square wave at a set frequency and duty cycle.
-
-## License
-
-This project is licensed under the MIT License — see [LICENSE](LICENSE) for the full text.

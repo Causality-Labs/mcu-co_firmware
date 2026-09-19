@@ -13,6 +13,7 @@ void GpioSpy_SetIsInput(bool value);
 void GpioSpy_SetIsOutput(bool value);
 void GpioSpy_SetIsAf(bool value);
 void GpioSpy_SetReadState(bool value); /* value gpio_read() writes to its output param */
+void GpioSpy_SetToggleState(bool value); /* value gpio_toggle() writes to its output param */
 void GpioSpy_SetArmedTrigger(gpio_trigger_t trigger);  /* trigger gpio_get_interrupt_trigger() reports */
 void GpioSpy_SetArmedTriggerStatus(status_t status);   /* status it returns; non-OK leaves the output param alone */
 

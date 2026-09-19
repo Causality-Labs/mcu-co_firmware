@@ -172,11 +172,14 @@ status_t gpio_set_state(const gpio_pin_t *gpio, gpio_state_t state);
 /**
  * @brief Toggle a GPIO output pin.
  *
- * @param gpio Pointer to pin handle (port + pin number)
+ * @param gpio  Pointer to pin handle (port + pin number)
+ * @param state Optional output parameter for the pin's level after toggling;
+ *              pass NULL to discard it (e.g. an ISR action that only cares
+ *              about the side effect)
  * @return STATUS_OK on success, STATUS_ERR_INVALID_PIN on an invalid pin,
  *         STATUS_ERR_INVALID_STATE if the pin is not configured as an output.
  */
-status_t gpio_toggle(const gpio_pin_t *gpio);
+status_t gpio_toggle(const gpio_pin_t *gpio, bool *state);
 
 /**
  * @brief Read the logic level of a GPIO input pin.
