@@ -56,4 +56,16 @@ status_t command_transport_receive(uint8_t *data);
  */
 status_t command_transport_send(const uint8_t *frame, uint16_t length);
 
+/**
+ * @brief Block until the last sent frame finishes transmitting.
+ *
+ * command_transport_send() only waits for the UART to accept the bytes, not
+ * for them to leave the wire.
+ *
+ * @return STATUS_OK on success, STATUS_ERR_NOT_INIT if
+ *         command_transport_init() has not been called (or was
+ *         deinitialised), or the error returned by the UART flush.
+ */
+status_t command_transport_flush(void);
+
 #endif /* COMMAND_TRANSPORT_H */

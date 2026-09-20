@@ -460,6 +460,31 @@ status_t uart_write_buffer(uart_instance_t instance, const uint8_t *data, uint16
     return STATUS_OK;
 }
 
+status_t uart_flush(uart_instance_t instance)
+{
+    if (instance >= NUM_OF_UART_PORTS)
+    {
+        return STATUS_ERR_INVALID_ARG;
+    }
+
+    if (!uart_initialized[instance])
+    {
+        return STATUS_ERR_NOT_INIT;
+    }
+
+    if (uart_modes[instance] != UART_MODE_TX && uart_modes[instance] != UART_MODE_TX_RX)
+    {
+        return STATUS_ERR_INVALID_STATE;
+    }
+
+    if (wait_for_ack(uart_channels[instance], USART_ISR_TC) != 0)
+    {
+        return STATUS_ERR_TIMEOUT;
+    }
+
+    return STATUS_OK;
+}
+
 status_t uart_read_buffer(uart_instance_t instance, uint8_t *data, uint16_t length, uint16_t *bytes_read)
 {
     if (data == NULL || bytes_read == NULL || instance >= NUM_OF_UART_PORTS)

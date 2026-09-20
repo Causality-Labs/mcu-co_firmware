@@ -85,3 +85,13 @@ status_t command_transport_send(const uint8_t *frame, uint16_t length)
 
     return uart_write_buffer(transport_instance, frame, length);
 }
+
+status_t command_transport_flush(void)
+{
+    if (!initialized)
+    {
+        return STATUS_ERR_NOT_INIT;
+    }
+
+    return uart_flush(transport_instance);
+}

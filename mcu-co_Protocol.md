@@ -118,6 +118,7 @@ e.g. CRC `0xE433` is transmitted as `33 E4`.
 | CLI | Opcode | Payload | Response payload |
 |-----|--------|---------|------------------|
 | `probe` | `PROBE` `0x10` | *(none)* | `[ACK/NACK, MAGIC]` |
+| `reset` | `RESET` `0x11` | *(none)* | `[ACK/NACK]` |
 | `gpio cfg input\|output <port> <pin>` | `GPIO_CFG` `0x30` | `[DIR, PORT, PIN]` | `[ACK/NACK]` |
 | `gpio set high\|low <port> <pin>` | `GPIO_WRITE` `0x31` | `[LEVEL, PORT, PIN]` | `[ACK/NACK]` |
 | `gpio get <port> <pin>` | `GPIO_READ` `0x32` | `[PORT, PIN]` | `[ACK/NACK, STATE]` |
@@ -159,6 +160,33 @@ cmd   A5 10 00        7C 1E
 resp  A5 05  01  4D 43 55 4F  C6 BC
             │   └ MAGIC     = "MCUO"
             └ ACK/NACK  = 1 (success)
+```
+
+## 0.5 `reset` — reboot the MCU
+
+```
+reset
+```
+
+No payload, no controller — like `probe`, it's a system-level command. ACKs first, then performs
+a full system reset (equivalent to the NRST pin, not a power cycle): every peripheral register
+returns to its power-on default and execution restarts from the reset vector. SRAM is left as-is
+(only your own `.bss`/`.data` startup code makes globals look fresh), and the backup domain (RTC,
+backup registers) survives, same as any other system reset — only an actual power loss on VBAT
+clears that.
+
+**The ACK is guaranteed to be fully on the wire before the reset happens** — the firmware waits
+for the UART to finish physically transmitting it, not just queue it, before resetting. But the
+host must not expect anything after that ACK: the link goes down for the reboot, and the host
+should treat the connection as gone until it reconnects — e.g. by polling `probe` again.
+
+A non-empty payload is rejected with `ERR_INVALID_ARG`, same as `probe`.
+
+Payload *(none)*. Example:
+
+```
+cmd   A5 11 00        4D 2D
+ack   A5 01  01     1F 3E
 ```
 
 ## 1. `gpio cfg` — configure pin direction
@@ -610,6 +638,8 @@ nak   A5 02  00  05    59 F2
 The worked frames above are valid CCITT-FALSE frames and can be used directly as parser test vectors. Additional cases worth fuzzing: bytes delivered one-per-interrupt, partial frame then timeout, single-bit CRC flips, `0xA5` embedded in payload, unknown opcode, out-of-range port/pin, EXTI-line conflicts (now signaled as a bare NACK), `gpio irq bind` targeting an edge that isn't currently armed, `gpio irq bind` on a pin that's already bound, and `gpio irq unbind` on a pin with no active binding.
 
 `probe` given a non-empty payload (`ERR_INVALID_ARG`), and `gpio toggle` on a pin that isn't configured as an output (`ERR_INVALID_STATE`) — plus toggling a pin currently low and confirming `STATE` comes back high, and vice versa, since a handler that hardcodes one level would still pass a test that only checks one direction.
+
+`reset` given a non-empty payload (`ERR_INVALID_ARG`, and the reset must not fire), and confirming the ACK's bytes are fully on the wire — not truncated — before the link drops for the reboot.
 
 PWM-specific cases: `pwm channel cfg` on a pin with no PWM channel mapped (e.g. PA0),
 `pwm channel cfg` before its group has a frequency, `pwm channel cfg` on a pin already claimed

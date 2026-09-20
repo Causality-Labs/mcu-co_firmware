@@ -1,6 +1,7 @@
 #ifndef COMMAND_DISPATCHER_H
 #define COMMAND_DISPATCHER_H
 
+#include <stdbool.h>
 #include <stdint.h>
 #include "status.h"
 #include "frame_parser.h"
@@ -21,5 +22,16 @@
  *         status the controller failed with.
  */
 status_t dispatch_command(command_frame_t *frame, response_frame_t *resp);
+
+/**
+ * @brief Report and clear a pending RESET (0x11) request.
+ *
+ * dispatch_command() only records that RESET was asked for; it never resets
+ * the MCU itself, since the caller still has to flush the transport first so
+ * the ACK reaches the host.
+ *
+ * @return true if a RESET was pending (and clears it), false otherwise
+ */
+bool command_dispatcher_take_reset_request(void);
 
 #endif /* COMMAND_DISPATCHER_H */

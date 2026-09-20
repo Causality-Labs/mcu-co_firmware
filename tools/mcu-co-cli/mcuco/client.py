@@ -106,6 +106,10 @@ class McuCo:
         """probe — confirm the link; response.data is the magic word (PROBE_MAGIC) on success"""
         return self._send(Opcode.PROBE, b"")
 
+    def reset(self) -> Response:
+        """reset — reboot the MCU; the link drops right after the ACK, so don't expect a reply after that"""
+        return self._send(Opcode.RESET, b"")
+
     def gpio_cfg(self, direction, port, pin) -> Response:
         """gpio cfg input|output <port> <pin>"""
         payload = bytes([_enum(Dir, direction, "direction"), _port(port), _pin(pin)])
