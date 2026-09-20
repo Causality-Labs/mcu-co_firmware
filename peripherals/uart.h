@@ -139,6 +139,20 @@ status_t uart_write_byte(uart_instance_t instance, const uint8_t data);
 status_t uart_write_buffer(uart_instance_t instance, const uint8_t *data, uint16_t length);
 
 /**
+ * @brief Block until the last written byte finishes transmitting.
+ *
+ * uart_write_byte() only waits for the data register to empty, not for the
+ * byte to actually leave the wire.
+ *
+ * @param instance UART peripheral to wait on
+ * @return STATUS_OK on success, STATUS_ERR_INVALID_ARG on an invalid instance,
+ *         STATUS_ERR_NOT_INIT if not initialised, STATUS_ERR_INVALID_STATE if
+ *         the instance is not in a TX-capable mode, STATUS_ERR_TIMEOUT if
+ *         transmission did not complete in time.
+ */
+status_t uart_flush(uart_instance_t instance);
+
+/**
  * @brief Read a single byte from the RX ring buffer.
  *
  * @param instance UART peripheral to read from

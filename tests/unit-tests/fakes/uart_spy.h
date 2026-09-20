@@ -23,6 +23,9 @@ uart_instance_t UartSpy_GetLastDeinitInstance(void);
 
 uart_instance_t UartSpy_GetLastReadByteInstance(void);
 
+uint16_t UartSpy_GetFlushCallCount(void);
+uart_instance_t UartSpy_GetLastFlushInstance(void);
+
 /* Controls uart_read_byte()'s behavior: if no byte is queued, it returns
  * STATUS_ERR_EMPTY (current behavior). Otherwise it returns the queued byte
  * via `data` and STATUS_OK. */

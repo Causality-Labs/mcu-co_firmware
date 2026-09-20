@@ -46,6 +46,21 @@ class Probe(unittest.TestCase):
         self.assertEqual(client.probe(), Response(ack=True, data=PROBE_MAGIC))
 
 
+# --- reset ---
+
+class Reset(unittest.TestCase):
+    # Matches the doc's section 0.5 frame for "reset" - no payload.
+    def test_SendsDocResetFrame(self):
+        client, stream = mcu()
+        client.reset()
+        self.assertEqual(bytes(stream.written), frame("A5 11 00 4D 2D"))
+
+    # A bare ACK, same as every other no-data command.
+    def test_ReturnsDecodedResponse(self):
+        client, _ = mcu()
+        self.assertEqual(client.reset(), Response(ack=True))
+
+
 # --- gpio_cfg ---
 
 class GpioCfg(unittest.TestCase):

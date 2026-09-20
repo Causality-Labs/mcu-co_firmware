@@ -20,6 +20,9 @@ static uart_instance_t last_read_byte_instance;
 static bool read_byte_available;
 static uint8_t next_read_byte;
 
+static uint16_t flush_call_count;
+static uart_instance_t last_flush_instance;
+
 static status_t forced_status;
 
 void UartSpy_Reset(void)
@@ -33,6 +36,8 @@ void UartSpy_Reset(void)
     memset(&last_read_byte_instance, 0, sizeof(last_read_byte_instance));
     read_byte_available = false;
     next_read_byte = 0;
+    flush_call_count = 0;
+    memset(&last_flush_instance, 0, sizeof(last_flush_instance));
     forced_status = STATUS_OK;
 }
 
@@ -74,6 +79,16 @@ uart_instance_t UartSpy_GetLastDeinitInstance(void)
 uart_instance_t UartSpy_GetLastReadByteInstance(void)
 {
     return last_read_byte_instance;
+}
+
+uint16_t UartSpy_GetFlushCallCount(void)
+{
+    return flush_call_count;
+}
+
+uart_instance_t UartSpy_GetLastFlushInstance(void)
+{
+    return last_flush_instance;
 }
 
 void UartSpy_SetNextReadByte(uint8_t byte)
@@ -132,6 +147,13 @@ status_t uart_read_byte(uart_instance_t instance, uint8_t *data)
     read_byte_available = false;
 
     return STATUS_OK;
+}
+
+status_t uart_flush(uart_instance_t instance)
+{
+    flush_call_count++;
+    last_flush_instance = instance;
+    return forced_status;
 }
 
 status_t uart_read_buffer(uart_instance_t instance, uint8_t *data, uint16_t length, uint16_t *bytes_read)

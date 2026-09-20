@@ -33,6 +33,7 @@ PROBE_MAGIC = b"MCUO"
 
 class Opcode(IntEnum):
     PROBE = 0x10
+    RESET = 0x11
     GPIO_CFG = 0x30
     GPIO_WRITE = 0x31
     GPIO_READ = 0x32

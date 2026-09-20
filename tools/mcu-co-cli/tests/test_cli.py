@@ -62,6 +62,7 @@ class Grammar(unittest.TestCase):
     def test_ProducesDocFrameForEveryCommand(self):
         cases = [
             (["probe"], "a5 10 00 7c 1e"),
+            (["reset"], "a5 11 00 4d 2d"),
             (["gpio", "cfg", "output", "A", "5"], "a5 30 03 01 00 05 ab e1"),
             (["gpio", "set", "high", "A", "5"], "a5 31 03 01 00 05 fa 4b"),
             (["gpio", "get", "A", "5"], "a5 32 02 00 05 84 7b"),
@@ -154,6 +155,17 @@ class ProbeOutput(unittest.TestCase):
         code, out = run(["probe"], rx=frame("A5 05 01 00 00 00 00 40 E7"))
         self.assertEqual(code, EXIT_ACK)
         self.assertIn("unexpected", out)
+
+
+# --- reset output ---
+
+class ResetOutput(unittest.TestCase):
+    # reset carries no data, so a successful ACK just says OK, same as any
+    # other no-data command.
+    def test_PrintsOkOnAck(self):
+        code, out = run(["reset"], rx=ACK)
+        self.assertEqual(code, EXIT_ACK)
+        self.assertEqual(out, "OK")
 
 
 # --- usage errors ---

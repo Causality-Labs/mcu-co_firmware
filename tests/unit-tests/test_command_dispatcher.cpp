@@ -9,6 +9,7 @@ extern "C"
 }
 
 #define OPCODE_PROBE 0x10U
+#define OPCODE_RESET 0x11U
 
 #define OPCODE_GPIO_CFG        0x30U
 #define OPCODE_GPIO_WRITE      0x31U
@@ -42,6 +43,7 @@ TEST_GROUP(CommandDispatcher)
         PwmControllerSpy_Reset();
         frame = command_frame_t();
         resp  = response_frame_t();
+        (void)command_dispatcher_take_reset_request(); // discard any flag left by a prior test
     }
 };
 
@@ -222,6 +224,53 @@ TEST(CommandDispatcher, DispatchProbeRejectsNonEmptyPayload)
     CHECK_FALSE(resp.ack);
     LONGS_EQUAL(1, resp.data_len);
     LONGS_EQUAL(STATUS_ERR_INVALID_ARG, resp.data[0]);
+}
+
+// RESET (0x11) also has no controller of its own - it should bare-ack and
+// raise the pending flag command_dispatcher_take_reset_request() reports.
+TEST(CommandDispatcher, DispatchRoutesResetOpcodeAndRaisesPendingFlag)
+{
+    frame.opcode = OPCODE_RESET;
+    frame.length = 0;
+
+    LONGS_EQUAL(STATUS_OK, dispatch_command(&frame, &resp));
+    CHECK_TRUE(resp.ack);
+    LONGS_EQUAL(0, resp.data_len);
+    CHECK_TRUE(command_dispatcher_take_reset_request());
+}
+
+// RESET carries no payload; a non-empty one should be rejected, and must not
+// raise the pending flag.
+TEST(CommandDispatcher, DispatchResetRejectsNonEmptyPayload)
+{
+    frame.opcode     = OPCODE_RESET;
+    frame.length     = 1;
+    frame.payload[0] = 0;
+
+    LONGS_EQUAL(STATUS_ERR_INVALID_ARG, dispatch_command(&frame, &resp));
+    CHECK_FALSE(resp.ack);
+    LONGS_EQUAL(1, resp.data_len);
+    LONGS_EQUAL(STATUS_ERR_INVALID_ARG, resp.data[0]);
+    CHECK_FALSE(command_dispatcher_take_reset_request());
+}
+
+/* --- command_dispatcher_take_reset_request --- */
+
+// With nothing dispatched, no reset should be pending.
+TEST(CommandDispatcher, TakeResetRequestFalseWhenNothingPending)
+{
+    CHECK_FALSE(command_dispatcher_take_reset_request());
+}
+
+// Reading the flag should clear it, so a second read doesn't re-trigger a reset.
+TEST(CommandDispatcher, TakeResetRequestClearsAfterReading)
+{
+    frame.opcode = OPCODE_RESET;
+    frame.length = 0;
+    dispatch_command(&frame, &resp);
+
+    CHECK_TRUE(command_dispatcher_take_reset_request());
+    CHECK_FALSE(command_dispatcher_take_reset_request());
 }
 
 // A failure from gpio_controller must be propagated, and the response must

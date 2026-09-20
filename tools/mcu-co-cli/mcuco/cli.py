@@ -6,6 +6,7 @@ The grammar is a transcription of the command reference in mcu-co_Protocol.md,
 so a command typed here is the command that will be typed there:
 
     mcu-co-cli probe
+    mcu-co-cli reset
     mcu-co-cli gpio cfg output A 5
     mcu-co-cli gpio set high A 5
     mcu-co-cli gpio get C 13
@@ -137,6 +138,7 @@ def build_parser() -> argparse.ArgumentParser:
     peripheral = parser.add_subparsers(dest="peripheral", required=True)
 
     peripheral.add_parser("probe", help="confirm the link and identify the firmware")
+    peripheral.add_parser("reset", help="reboot the MCU")
 
     gpio = peripheral.add_parser("gpio", help="GPIO commands")
     gpio_cmd = gpio.add_subparsers(dest="command", required=True)
@@ -213,6 +215,8 @@ def build_parser() -> argparse.ArgumentParser:
 def run_command(mcu: McuCo, args):
     if args.peripheral == "probe":
         return mcu.probe()
+    if args.peripheral == "reset":
+        return mcu.reset()
 
     if args.peripheral == "pwm":
         return run_pwm_command(mcu, args)

@@ -9,6 +9,7 @@
 #define MODULE_NAME "COMMAND DISPATCHER"
 
 #define PROBE 0x10U
+#define RESET 0x11U
 
 #define GPIO_CFG        0x30U
 #define GPIO_WRITE      0x31U
@@ -90,6 +91,26 @@ static status_t read_probe_magic(const uint8_t *payload, uint8_t length, uint32_
     return STATUS_OK;
 }
 
+/* Set by request_reset(), read by command_dispatcher_take_reset_request().
+ * dispatch_command() only records the request - actually resetting has to
+ * wait until the ACK this generates has been sent, which is main.c's call. */
+static bool reset_requested = false;
+
+/* RESET (0x11), like PROBE, has no controller of its own. */
+static status_t request_reset(const uint8_t *payload, uint8_t length)
+{
+    (void)payload;
+
+    if (length != 0U)
+    {
+        return STATUS_ERR_INVALID_ARG;
+    }
+
+    reset_requested = true;
+
+    return STATUS_OK;
+}
+
 /* gpio_controller_toggle() reports the pin's post-toggle level as a bool,
  * which the table's single read signature widens to uint32_t so all read
  * opcodes share one call site. */
@@ -126,6 +147,7 @@ static status_t read_pwm_duty(const uint8_t *payload, uint8_t length, uint32_t *
 
 static const command_entry_t COMMAND_TABLE[] = {
     {.opcode = PROBE, .read = read_probe_magic, .data_len = 4U, .name = "probe"},
+    {.opcode = RESET, .action = request_reset, .data_len = 0U, .name = "reset"},
     {.opcode = GPIO_CFG, .action = gpio_controller_io_cfg, .data_len = 0U, .name = "gpio cfg"},
     {.opcode = GPIO_WRITE, .action = gpio_controller_write, .data_len = 0U, .name = "gpio write"},
     {.opcode = GPIO_READ, .read = read_gpio_pin, .data_len = 1U, .name = "gpio read"},
@@ -224,4 +246,13 @@ status_t dispatch_command(command_frame_t *frame, response_frame_t *resp)
     resp->ack      = true;
 
     return STATUS_OK;
+}
+
+bool command_dispatcher_take_reset_request(void)
+{
+    bool pending = reset_requested;
+
+    reset_requested = false;
+
+    return pending;
 }

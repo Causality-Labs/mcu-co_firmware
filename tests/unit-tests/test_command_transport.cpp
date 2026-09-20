@@ -157,3 +157,30 @@ TEST(CommandTransport, SendPropagatesUartWriteFailure)
     const uint8_t frame[] = {0xA5, 0x01, 0x01, 0x1F, 0x3E};
     LONGS_EQUAL(STATUS_ERR_INVALID_ARG, command_transport_send(frame, sizeof(frame)));
 }
+
+/* --- command_transport_flush --- */
+
+// flush() should reject calls made before init() (or after deinit()).
+TEST(CommandTransport, FlushFailsWhenNotInitialised)
+{
+    LONGS_EQUAL(STATUS_ERR_NOT_INIT, command_transport_flush());
+}
+
+// flush() should call uart_flush() using the instance stored at init.
+TEST(CommandTransport, FlushCallsUartFlushWithStoredInstance)
+{
+    command_transport_init(UART_INSTANCE_USART2);
+
+    LONGS_EQUAL(STATUS_OK, command_transport_flush());
+    LONGS_EQUAL(1, UartSpy_GetFlushCallCount());
+    LONGS_EQUAL(UART_INSTANCE_USART2, UartSpy_GetLastFlushInstance());
+}
+
+// flush() should propagate a UART flush failure without swallowing it.
+TEST(CommandTransport, FlushPropagatesUartFlushFailure)
+{
+    command_transport_init(UART_INSTANCE_USART2);
+    UartSpy_SetReturnStatus(STATUS_ERR_TIMEOUT);
+
+    LONGS_EQUAL(STATUS_ERR_TIMEOUT, command_transport_flush());
+}

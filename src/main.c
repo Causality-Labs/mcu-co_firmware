@@ -126,6 +126,14 @@ int main(void)
                 {
                     LOG_ERROR(MODULE_NAME, "command_transport_send() failed: %s", status_to_str(send_status));
                 }
+
+                if (command_dispatcher_take_reset_request())
+                {
+                    LOG_INFO(MODULE_NAME, "RESET requested - flushing transport and resetting");
+                    logger_flush();
+                    (void)command_transport_flush();
+                    NVIC_SystemReset();
+                }
             }
 
             if (frame_status == FRAME_ERROR)
